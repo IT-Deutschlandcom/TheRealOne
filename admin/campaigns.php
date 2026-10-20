@@ -68,10 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insert = $pdo->prepare(
                     "INSERT INTO campaigns
                      (list_id, created_by, updated_by, name, from_name, from_email, reply_to, subject, html_content, text_content)
-                     VALUES (:list, :admin, :admin, :name, :from_name, :from_email, :reply_to, :subject, :html, :text)"
+                     VALUES (:list, :created_by, :updated_by, :name, :from_name, :from_email, :reply_to, :subject, :html, :text)"
                 );
                 $insert->execute([
-                    'list' => $listId, 'admin' => $admin['id'], 'name' => $name,
+                    'list' => $listId, 'created_by' => $admin['id'], 'updated_by' => $admin['id'], 'name' => $name,
                     'from_name' => $fromName, 'from_email' => $fromEmail,
                     'reply_to' => $replyTo ?: null, 'subject' => $subject,
                     'html' => $html, 'text' => $text,
@@ -84,10 +84,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $copy = $pdo->prepare(
                 "INSERT INTO campaigns (list_id, created_by, updated_by, name, from_name, from_email, reply_to,
                  subject, html_content, text_content)
-                 SELECT list_id, :admin, :admin, CONCAT(LEFT(name, 160), ' (Kopie)'), from_name, from_email,
+             SELECT list_id, :created_by, :updated_by, CONCAT(LEFT(name, 160), ' (Kopie)'), from_name, from_email,
                  reply_to, subject, html_content, text_content FROM campaigns WHERE id=:id"
             );
-            $copy->execute(['admin' => $admin['id'], 'id' => $id]);
+            $copy->execute(['created_by' => $admin['id'], 'updated_by' => $admin['id'], 'id' => $id]);
             if ($copy->rowCount() !== 1) {
                 throw new RuntimeException('Kampagne nicht gefunden.');
             }

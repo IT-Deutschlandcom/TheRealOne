@@ -38,7 +38,7 @@ Die Importbestätigung ist eine administrative Dokumentation, kein automatischer
 
 ## Noch offen
 
-Die vollständige Aufgabenstellung umfasst wesentlich mehr als die hier implementierte Basis. Insbesondere fehlen aktuell SMTP-Profile und -Tests, Versandwarteschlange, Windows-Worker, Live-Monitoring, Abmeldeseiten und RFC-8058-Unterstützung, Bounce-Verarbeitung, Proxy-Verwaltung, Zustellbarkeitsdiagnose, Templates, Scheduler, Exporte/Löschfunktionen, System Health, CSV-/Dateiimport, vollständige Rollenverwaltung, Tests und ein umfassendes produktives Dashboard. Diese Funktionen sind nicht durch Platzhalterbuttons als verfügbar dargestellt.
+Die vollständige Aufgabenstellung umfasst wesentlich mehr als die hier implementierte Basis. Insbesondere fehlen aktuell SMTP-Profile und -Tests, Rich-Text-Editor und Vorschau, Versandwarteschlange, Windows-Worker, Live-Monitoring, Abmeldeseiten und RFC-8058-Unterstützung, Bounce-Verarbeitung, Proxy-Verwaltung, Zustellbarkeitsdiagnose, Templates, Scheduler, Exporte/Löschfunktionen, System Health, CSV-/Dateiimport, vollständige Rollenverwaltung, Tests und ein umfassendes produktives Dashboard. Diese Funktionen sind nicht durch Platzhalterbuttons als verfügbar dargestellt.
 
 ## Datenbankhinweis
 
