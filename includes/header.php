@@ -20,7 +20,10 @@ $admin = current_admin();
         </nav>
         <div class="sidebar-user">
             <span><?= escape($admin['email'] ?? '') ?></span>
-            <a href="/logout.php">Abmelden</a>
+            <form method="post" action="/logout.php">
+                <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
+                <button class="button-secondary" type="submit">Abmelden</button>
+            </form>
         </div>
     </aside>
     <main class="main-content">

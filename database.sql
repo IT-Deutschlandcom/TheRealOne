@@ -37,6 +37,14 @@ CREATE TABLE admin_activity_logs (
     CONSTRAINT fk_activity_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE admin_login_attempts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    ip_hash CHAR(64) NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY ix_login_attempts_ip_time (ip_hash, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE settings (
     setting_key VARCHAR(100) NOT NULL,
     setting_value TEXT NULL,

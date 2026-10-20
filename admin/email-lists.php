@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($action === 'create') {
             $name = trim((string) ($_POST['name'] ?? ''));
-            if ($name === '' || mb_strlen($name, 'UTF-8') > 150) {
+            if ($name === '' || text_length($name) > 150) {
                 throw new RuntimeException('Der Listenname muss zwischen 1 und 150 Zeichen lang sein.');
             }
             $stmt = $pdo->prepare('INSERT INTO email_lists (name, created_by) VALUES (:name, :admin)');
@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'rename') {
             $id = filter_input(INPUT_POST, 'list_id', FILTER_VALIDATE_INT);
             $name = trim((string) ($_POST['name'] ?? ''));
-            if (!$id || $name === '' || mb_strlen($name, 'UTF-8') > 150) {
+            if (!$id || $name === '' || text_length($name) > 150) {
                 throw new RuntimeException('Ungültiger Listenname.');
             }
             $stmt = $pdo->prepare('UPDATE email_lists SET name = :name WHERE id = :id');
@@ -45,8 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $grantedAt = (string) ($_POST['granted_at'] ?? '');
             $confirmed = isset($_POST['permission_confirmed']);
             $validDate = DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $grantedAt);
+            $dateErrors = DateTimeImmutable::getLastErrors();
             if (!$listId || !in_array($basis, ['consent', 'existing_customer'], true) || $evidence === '' ||
-                mb_strlen($evidence, 'UTF-8') > 500 || !$validDate || !$confirmed) {
+                strlen($evidence) > 500 || !$validDate ||
+                ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) ||
+                $validDate > new DateTimeImmutable('now') || !$confirmed) {
                 throw new RuntimeException('Geben Sie eine Versandgrundlage, deren Herkunft und Zeitpunkt an und bestätigen Sie die Berechtigung.');
             }
             if (strlen($raw) > 2_000_000) {
@@ -90,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $counts['invalid']++;
                     continue;
                 }
-                $normalized = mb_strtolower($email, 'UTF-8');
+                $normalized = strtolower($email);
                 if (isset($seen[$normalized])) {
                     $counts['duplicate']++;
                     continue;
@@ -125,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'contact' => $contactId,
                     'basis' => $basis,
                     'source' => $evidence,
-                    'granted' => $validDate->format('Y-m-d H:i:s'),
+                    'granted' => $validDate->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                     'admin' => $admin['id'],
                 ]);
                 $counts['imported']++;

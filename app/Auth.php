@@ -33,7 +33,7 @@ function login_admin(PDO $pdo, string $email, string $password): bool
          FROM admins a JOIN roles r ON r.id = a.role_id
          WHERE a.email = :email AND a.is_active = 1 LIMIT 1'
     );
-    $query->execute(['email' => mb_strtolower(trim($email), 'UTF-8')]);
+    $query->execute(['email' => strtolower(trim($email))]);
     $admin = $query->fetch();
     if (!$admin || !password_verify($password, $admin['password_hash'])) {
         return false;
@@ -46,10 +46,18 @@ function login_admin(PDO $pdo, string $email, string $password): bool
         'role' => $admin['role'],
     ];
     $_SESSION['last_activity'] = time();
+    unset($_SESSION['csrf_token']);
     $pdo->prepare('UPDATE admins SET last_login_at = UTC_TIMESTAMP() WHERE id = :id')
         ->execute(['id' => $admin['id']]);
+    $pdo->prepare('DELETE FROM admin_login_attempts WHERE ip_hash = :ip_hash')
+        ->execute(['ip_hash' => login_ip_hash()]);
     log_activity($pdo, (int) $admin['id'], 'admin.login');
     return true;
+}
+
+function login_ip_hash(): string
+{
+    return hash('sha256', (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
 }
 
 function logout_admin(): void

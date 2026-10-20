@@ -8,17 +8,21 @@ if (current_admin() !== null) {
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
-    $now = time();
-    $attempts = $_SESSION['login_attempts'] ?? [];
-    $attempts = array_values(array_filter($attempts, static fn ($time) => is_int($time) && $time > $now - 900));
-    if (count($attempts) >= 8) {
+    $ipHash = login_ip_hash();
+    $pdo->prepare('DELETE FROM admin_login_attempts WHERE attempted_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE')
+        ->execute();
+    $rate = $pdo->prepare(
+        'SELECT COUNT(*) FROM admin_login_attempts
+         WHERE ip_hash = :ip_hash AND attempted_at >= UTC_TIMESTAMP() - INTERVAL 15 MINUTE'
+    );
+    $rate->execute(['ip_hash' => $ipHash]);
+    if ((int) $rate->fetchColumn() >= 8) {
         $error = 'Zu viele Anmeldeversuche. Bitte warten Sie 15 Minuten.';
     } elseif (login_admin($pdo, (string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''))) {
-        unset($_SESSION['login_attempts']);
         redirect('/admin/dashboard.php');
     } else {
-        $attempts[] = $now;
-        $_SESSION['login_attempts'] = $attempts;
+        $pdo->prepare('INSERT INTO admin_login_attempts (ip_hash, attempted_at) VALUES (:ip_hash, UTC_TIMESTAMP())')
+            ->execute(['ip_hash' => $ipHash]);
         $error = 'Anmeldung fehlgeschlagen.';
         try {
             log_activity($pdo, null, 'admin.login_failed');

@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'INSERT INTO admins (role_id, email, password_hash, is_active) VALUES (1, :email, :hash, 1)'
             );
             $insert->execute([
-                'email' => mb_strtolower($email, 'UTF-8'),
+                'email' => strtolower($email),
                 'hash' => password_hash($password, PASSWORD_DEFAULT),
             ]);
             $id = (int) $pdo->lastInsertId();

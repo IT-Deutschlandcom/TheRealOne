@@ -6,6 +6,12 @@ function escape(string|int|null $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function text_length(string $value): int
+{
+    $length = preg_match_all('/./us', $value);
+    return $length === false ? strlen($value) : $length;
+}
+
 function csrf_token(): string
 {
     if (!isset($_SESSION['csrf_token'])) {
