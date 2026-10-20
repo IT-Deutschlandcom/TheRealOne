@@ -24,7 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_activity($pdo, (int) $admin['id'], 'template.category_created');
             $message = 'Kategorie angelegt.';
         } elseif (in_array($action, ['save', 'duplicate'], true)) {
-            $id = filter_var($_POST['template_id'] ?? null, FILTER_VALIDATE_INT);
+            $templateValue = $_POST['template_id'] ?? null;
+            $id = ($templateValue === null || $templateValue === '') ? null : filter_var($templateValue, FILTER_VALIDATE_INT);
             $categoryId = filter_var($_POST['category_id'] ?? null, FILTER_VALIDATE_INT);
             $name = trim((string) ($_POST['name'] ?? ''));
             $subject = trim((string) ($_POST['subject'] ?? ''));

@@ -2,7 +2,7 @@
 
 Die PHP-Anwendung enthält eine IIS-kompatible Grundlage für Administrator-Login, Empfängerlisten, dokumentierte Versandgrundlagen, Kampagnenentwürfe, SMTP-Konfiguration und einen datenbankgestützten Kampagnen-Worker. Die Dateien werden direkt ausgeführt; Node.js, Composer und ein Build-Schritt sind nicht erforderlich.
 
-**Wichtige Einschränkung:** Das ist weiterhin kein vollständiges CMS aus dem ursprünglichen Projektauftrag. SMTP-Kampagnenversand ist jetzt implementiert, aber bislang fehlen unter anderem Proxy-Verwaltung/Checker, Bounce-Postfachverarbeitung, Domain-Diagnose, Templates, vollständige Nutzer-/Rollenverwaltung, Datenexport/-löschung, CSV-Upload, vollständige SMTP-Testdiagnose und eine umfassende Testsuite. Unklare SMTP-Annahmen werden zur Duplikatvermeidung nicht erneut gesendet. Vor echtem Versand mit einem kontrollierten Empfänger und SMTP-Server testen.
+**Wichtige Einschränkung:** Das ist weiterhin kein vollständiges CMS aus dem ursprünglichen Projektauftrag. SMTP-Kampagnenversand ist implementiert. Bounce-Verarbeitung benötigt die optionale PHP-IMAP-Erweiterung und standardisierte DSN-Bounce-Nachrichten. Ein aktiver SOCKS5-Netzwerkchecker und Proxy-Routing für Mailversand sind absichtlich nicht implementiert. Unklare SMTP-Annahmen werden zur Duplikatvermeidung nicht erneut gesendet. Vor echtem Versand mit einem kontrollierten Empfänger und SMTP-Server testen.
 
 ## Voraussetzungen
 
@@ -76,9 +76,9 @@ Die Aufgabe läuft als `SYSTEM`, startet nur eine Instanz gleichzeitig, protokol
 
 ## Funktionen und offene Module
 
-Implementiert: Login/Ersteinrichtung, rollenbasierter Zugriff, CSRF, Audit-Logs, Listenverwaltung, Textimport mit Duplikat- und Suppression-Prüfung, Kampagnenentwürfe, ein SMTP-Profil mit verschlüsseltem Passwort, SMTP-Verbindungstest, Queue, Worker, konfigurierbares Intervall, Pause/Fortsetzen/Abbrechen, Live-Polling und signierte Web-/RFC-8058-Abmeldung, optionale IMAP-Bounce-Verarbeitung, DNS-Deliverability-Check, Vorlagen, CSV-Export mit Auditlog, System Health sowie Proxy-Inventarverwaltung.
+Implementiert: Login/Ersteinrichtung, rollenbasierter Zugriff, CSRF, Audit-Logs, Listenverwaltung, Textimport mit Duplikat- und Suppression-Prüfung, Kampagnenentwürfe, ein SMTP-Profil mit verschlüsseltem Passwort, SMTP-Verbindungstest, Queue, Worker, konfigurierbares Intervall, Pause/Fortsetzen/Abbrechen, Live-Polling und signierte Web-/RFC-8058-Abmeldung, optionale IMAP-Bounce-Verarbeitung, DNS-Deliverability-Check, Vorlagen, CSV-Export mit Auditlog, System Health, und Proxy-Inventarverwaltung.
 
-Noch offen: mehrere SMTP-Profile und Versandprofil-Auswahl, vollständige SMTP-Diagnoseberichte, vollständiger Zustellbericht-/Fehlerexport, Bounce-Abruf (abhängig von PHP-IMAP-Erweiterung und standardisiertem DSN-Inhalt), Proxy-Netzwerkchecker (absichtlich nicht implementiert; es gibt kein Proxy-Routing für Versand), umfassender Rich-Text-Editor/Template-Preview, Scheduler mit Zeitzonen, CSV-/TXT-Dateiimport, benutzerdefinierte Segmente/Felder, Nutzerverwaltung/komplette Rollenmatrix und Datenschutzlöschung. DNS-Deliverability und System Health sind Diagnosehinweise, keine Zustellgarantie. Diese Grenzen werden nicht als fertige Funktionen dargestellt.
+Noch offen: mehrere SMTP-Profile und Versandprofil-Auswahl, vollständige SMTP-Diagnoseberichte, vollständiger Zustellbericht-/Fehlerexport, Proxy-Netzwerkchecker (absichtlich nicht implementiert; es gibt kein Proxy-Routing für Versand), umfassender Rich-Text-Editor/Template-Preview, Scheduler mit Zeitzonen, CSV-/TXT-Dateiimport, benutzerdefinierte Segmente/Felder, Nutzerverwaltung/komplette Rollenmatrix und Datenschutzlöschung. DNS-Deliverability und System Health sind Diagnosehinweise, keine Zustellgarantie. Diese Grenzen werden nicht als fertige Funktionen dargestellt.
 
 ## Prüfungen
 
