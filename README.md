@@ -9,8 +9,9 @@ Die PHP-Anwendung enthält eine IIS-kompatible Grundlage für Administrator-Logi
 - Windows Server und IIS mit PHP FastCGI
 - PHP 8.2+, `pdo_mysql` und `openssl`
 - MySQL 8 oder kompatible MariaDB
-- HTTPS-Website mit einer stabilen öffentlichen URL
+- Für Testbetrieb HTTP-URL; für öffentlichen Produktivbetrieb zwingend HTTPS
 - Autorisierter SMTP-Server, der vom Windows-Server erreichbar ist
+- Optional die unter Windows installierbare PHP-IMAP-Erweiterung für Bounce-Abholung
 
 Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor/phpmailer/` eingebettet. Composer ist auf dem Zielserver nicht erforderlich.
 
@@ -21,7 +22,7 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 3. Für eine bestehende Installation aus der vorherigen CMS-Version statt des Neuimports einmalig `database-migration-delivery.sql` auf der CMS-Datenbank ausführen. Bei einem abweichenden Datenbanknamen die `USE`-Zeile anpassen. Vorher ein Datenbankbackup erstellen; das Migrationsskript ist nicht für wiederholte Ausführung vorgesehen.
 4. `config.php` bearbeiten:
    - Datenbankzugang eintragen.
-   - `app.url` auf die öffentliche HTTPS-Adresse der Website setzen, ohne abschließenden Slash.
+   - `app.url` auf die Website-Adresse setzen, ohne abschließenden Slash. Standard ist `http://localhost`; für öffentlich erreichbare Installation HTTPS verwenden.
    - `app.encryption_key` durch genau 64 zufällige Hex-Zeichen ersetzen. In Windows PowerShell kann ein Schlüssel so erzeugt werden:
 
      ```powershell
@@ -32,12 +33,16 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
      $rng.Dispose()
      ```
 
-   **Den Schlüssel sicher sichern und dauerhaft beibehalten.** SMTP-Passwörter und Abmeldesignaturen können bei Schlüsselverlust nicht mehr entschlüsselt bzw. geprüft werden.
-5. Website-Dateien in das IIS-Webverzeichnis kopieren und `config.php` sowie `storage` mit geeigneten NTFS-Rechten schützen. `web.config` sperrt interne Ordner, `config.php`, SQL-Dateien und die Task-Skripte vor HTTP-Zugriff. HTTPS und IIS-FastCGI müssen serverseitig eingerichtet sein.
+   **Den Schlüssel sicher sichern und dauerhaft beibehalten.** SMTP-/IMAP-/Proxy-Passwörter und Abmeldesignaturen können bei Schlüsselverlust nicht mehr entschlüsselt bzw. geprüft werden.
+5. Website-Dateien in das IIS-Webverzeichnis kopieren und `config.php` sowie `storage` mit geeigneten NTFS-Rechten schützen. `web.config` sperrt interne Ordner, `config.php`, SQL-Dateien und die Task-Skripte vor HTTP-Zugriff. IIS-FastCGI muss serverseitig eingerichtet sein.
 6. `install.php` aufrufen und den ersten Administrator anlegen. Danach den HTTP-Zugriff auf `install.php` zusätzlich in IIS sperren.
 7. Als Administrator unter **SMTP Settings** den autorisierten Relay-Server konfigurieren, speichern und **Test SMTP Connection** ausführen. Dieser Test verbindet sich und authentifiziert sich, sendet aber keine Test-E-Mail.
 8. Unter **Email Lists** nur Kontakte mit belegter gültiger Versandberechtigung importieren. Der Import dokumentiert die vom Administrator angegebene Grundlage; er verifiziert nicht automatisch deren rechtliche Gültigkeit.
-9. Kampagne unter **Campaign Manager** erstellen, HTML-Inhalt mit `{{unsubscribe_url}}` sowie eine Plain-Text-Alternative mit `{{unsubscribe_url}}` versehen, Intervall einstellen und Start betätigen. Bei Start werden aktive Kontakte mit dokumentiertem Nachweis in eine einmalige Queue übernommen; Sperrlisten werden beim Queue-Aufbau und nochmals unmittelbar vor dem Versand geprüft.
+9. Im Campaign Manager zuerst die gewünschte Liste und danach die **Absenderadresse** (muss der freigegebenen SMTP-Absenderadresse entsprechen) sowie Inhalte/Intervall konfigurieren. Erst beim expliziten Klick auf „Start“ werden Adressen aus dieser Liste in die Versandwarteschlange aufgenommen. HTML-Inhalt und Plain-Text-Alternative müssen beide `{{unsubscribe_url}}` enthalten. Sperrlisten werden beim Queue-Aufbau und nochmals unmittelbar vor dem Versand geprüft.
+
+### HTTP-Testbetrieb
+
+Die Anwendung akzeptiert standardmäßig `http://localhost` für lokale Tests; die Navigation zeigt auf jeder Admin-Seite einen deutlichen Warnhinweis. Bei HTTP können Passwörter, Sitzungen, SMTP-Zugangsdaten und Abmeldetoken von Dritten mitgelesen oder verändert werden. HTTP deshalb nur lokal oder in einem abgeschotteten Testnetz verwenden, nie öffentlich oder für echte Marketingkontakte. Für Produktivbetrieb `app.url` auf HTTPS ändern und HTTP in IIS auf HTTPS umleiten bzw. deaktivieren.
 
 ## Automatischer Versand unter Windows
 
@@ -71,9 +76,9 @@ Die Aufgabe läuft als `SYSTEM`, startet nur eine Instanz gleichzeitig, protokol
 
 ## Funktionen und offene Module
 
-Implementiert: Login/Ersteinrichtung, rollenbasierter Zugriff, CSRF, Audit-Logs, Listenverwaltung, Textimport mit Duplikat- und Suppression-Prüfung, Kampagnenentwürfe, ein SMTP-Profil mit verschlüsseltem Passwort, SMTP-Verbindungstest, Queue, Worker, konfigurierbares Intervall, Pause/Fortsetzen/Abbrechen, Live-Polling und signierte Web-/RFC-8058-Abmeldung.
+Implementiert: Login/Ersteinrichtung, rollenbasierter Zugriff, CSRF, Audit-Logs, Listenverwaltung, Textimport mit Duplikat- und Suppression-Prüfung, Kampagnenentwürfe, ein SMTP-Profil mit verschlüsseltem Passwort, SMTP-Verbindungstest, Queue, Worker, konfigurierbares Intervall, Pause/Fortsetzen/Abbrechen, Live-Polling und signierte Web-/RFC-8058-Abmeldung, optionale IMAP-Bounce-Verarbeitung, DNS-Deliverability-Check, Vorlagen, CSV-Export mit Auditlog, System Health sowie Proxy-Inventarverwaltung.
 
-Noch offen: mehrere SMTP-Profile und Versandprofil-Auswahl, vollständige SMTP-Diagnoseberichte, UI für Zustellberichte/Fehlerexporte, Bounce-Postfachverarbeitung, Soft-Bounce-Regeln, Proxy-Diagnose, Deliverability Center, Scheduler mit Zeitzonen, Template-Manager/Rich-Text-Editor, CSV- und TXT-Dateiupload, benutzerdefinierte Segmente/Felder, Nutzerverwaltung/komplette Rollenmatrix, Datenschutzexport/-löschung, System-Health-Modul und automatisierte Ende-zu-Ende-Tests. Diese Funktionen sind nicht als verfügbar dargestellt.
+Noch offen: mehrere SMTP-Profile und Versandprofil-Auswahl, vollständige SMTP-Diagnoseberichte, vollständiger Zustellbericht-/Fehlerexport, Bounce-Abruf (abhängig von PHP-IMAP-Erweiterung und standardisiertem DSN-Inhalt), Proxy-Netzwerkchecker (absichtlich nicht implementiert; es gibt kein Proxy-Routing für Versand), umfassender Rich-Text-Editor/Template-Preview, Scheduler mit Zeitzonen, CSV-/TXT-Dateiimport, benutzerdefinierte Segmente/Felder, Nutzerverwaltung/komplette Rollenmatrix und Datenschutzlöschung. DNS-Deliverability und System Health sind Diagnosehinweise, keine Zustellgarantie. Diese Grenzen werden nicht als fertige Funktionen dargestellt.
 
 ## Prüfungen
 

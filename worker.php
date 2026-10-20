@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/app/bootstrap.php';
 require_once __DIR__ . '/app/Mailer.php';
+require_once __DIR__ . '/app/BounceManager.php';
 
 $lockName = 'the_real_one_campaign_worker';
 if ((int) $pdo->query("SELECT GET_LOCK('{$lockName}', 0)")->fetchColumn() !== 1) {
@@ -15,6 +16,17 @@ if ((int) $pdo->query("SELECT GET_LOCK('{$lockName}', 0)")->fetchColumn() !== 1)
 }
 
 try {
+    $pdo->prepare(
+        "INSERT INTO worker_heartbeats (worker_name, last_seen_at, details)
+         VALUES ('campaign-worker', UTC_TIMESTAMP(), 'polling')
+         ON DUPLICATE KEY UPDATE last_seen_at=UTC_TIMESTAMP(), details='polling'"
+    )->execute();
+    try {
+        \MailMarketing\process_bounces($pdo, $config);
+    } catch (Throwable $exception) {
+        error_log('Bounce mailbox check failed: ' . $exception->getMessage());
+    }
+
     $pdo->exec(
         "UPDATE campaign_queue SET status='unknown', completed_at=UTC_TIMESTAMP(),
          last_error='Worker wurde während der SMTP-Übertragung unterbrochen; Annahmestatus unbekannt.'

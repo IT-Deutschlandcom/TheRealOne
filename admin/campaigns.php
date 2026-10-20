@@ -134,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $html = (string) ($_POST['html_content'] ?? '');
             $text = (string) ($_POST['text_content'] ?? '');
             $interval = filter_var($_POST['send_interval_seconds'] ?? 180, FILTER_VALIDATE_INT);
+            $templateId = filter_var($_POST['template_id'] ?? null, FILTER_VALIDATE_INT);
             if (!$listId || text_length($name) < 1 || text_length($name) > 180 ||
                 text_length($fromName) < 1 || text_length($fromName) > 160 ||
                 !filter_var($fromEmail, FILTER_VALIDATE_EMAIL) || strlen($fromEmail) > 254 ||
@@ -149,17 +150,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$listQuery->fetchColumn()) {
                 throw new RuntimeException('Die Empfängerliste existiert nicht.');
             }
+            $templateId = $templateId ?: null;
+            if ($templateId !== null) {
+                $templateQuery = $pdo->prepare('SELECT id FROM email_templates WHERE id=:id');
+                $templateQuery->execute(['id' => $templateId]);
+                if (!$templateQuery->fetchColumn()) {
+                    throw new RuntimeException('Die ausgewählte Vorlage existiert nicht.');
+                }
+            }
             if ($id) {
                 $update = $pdo->prepare(
                     "UPDATE campaigns SET list_id=:list, name=:name, from_name=:from_name,
                      from_email=:from_email, reply_to=:reply_to, subject=:subject,
-                     html_content=:html, text_content=:text, send_interval_seconds=:interval, updated_by=:admin
+                     html_content=:html, text_content=:text, template_id=:template_id,
+                     send_interval_seconds=:interval, updated_by=:admin
                      WHERE id=:id AND status='draft'"
                 );
                 $update->execute([
                     'list' => $listId, 'name' => $name, 'from_name' => $fromName,
                     'from_email' => $fromEmail, 'reply_to' => $replyTo ?: null,
-                    'subject' => $subject, 'html' => $html, 'text' => $text, 'interval' => $interval,
+                    'subject' => $subject, 'html' => $html, 'text' => $text,
+                    'template_id' => $templateId, 'interval' => $interval,
                     'admin' => $admin['id'], 'id' => $id,
                 ]);
                 if ($update->rowCount() === 0) {
@@ -174,11 +185,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $insert = $pdo->prepare(
                     "INSERT INTO campaigns
-                     (list_id, created_by, updated_by, name, from_name, from_email, reply_to, subject, html_content, text_content, send_interval_seconds)
-                     VALUES (:list, :created_by, :updated_by, :name, :from_name, :from_email, :reply_to, :subject, :html, :text, :interval)"
+                     (list_id, template_id, created_by, updated_by, name, from_name, from_email, reply_to, subject, html_content, text_content, send_interval_seconds)
+                     VALUES (:list, :template_id, :created_by, :updated_by, :name, :from_name, :from_email, :reply_to, :subject, :html, :text, :interval)"
                 );
                 $insert->execute([
-                    'list' => $listId, 'created_by' => $admin['id'], 'updated_by' => $admin['id'], 'name' => $name,
+                    'list' => $listId, 'template_id' => $templateId,
+                    'created_by' => $admin['id'], 'updated_by' => $admin['id'], 'name' => $name,
                     'from_name' => $fromName, 'from_email' => $fromEmail,
                     'reply_to' => $replyTo ?: null, 'subject' => $subject,
                     'html' => $html, 'text' => $text, 'interval' => $interval,
@@ -235,6 +247,7 @@ if ($editId) {
     $editing = $statement->fetch() ?: null;
 }
 $lists = $pdo->query('SELECT id, name FROM email_lists ORDER BY name')->fetchAll();
+$templates = $pdo->query('SELECT id, name, subject FROM email_templates ORDER BY name')->fetchAll();
 $campaigns = $pdo->query(
     "SELECT c.id, c.name, c.subject, c.status, c.updated_at, c.send_interval_seconds, l.name AS list_name,
      (SELECT COUNT(*) FROM email_list_contacts lc
@@ -265,6 +278,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <?php if ($editing): ?><input type="hidden" name="campaign_id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
         <label>Kampagnenname<input name="name" maxlength="180" required value="<?= escape($editing['name'] ?? '') ?>"></label>
         <label>Empfängerliste<select name="list_id" required><option value="">Auswählen …</option><?php foreach ($lists as $list): ?><option value="<?= (int) $list['id'] ?>" <?= (int) ($editing['list_id'] ?? 0) === (int) $list['id'] ? 'selected' : '' ?>><?= escape($list['name']) ?></option><?php endforeach; ?></select></label>
+        <label>Vorlage optional<select id="campaign-template" name="template_id"><option value="">Ohne Vorlage</option><?php foreach ($templates as $template): ?><option value="<?= (int) $template['id'] ?>" <?= (int) ($editing['template_id'] ?? 0) === (int) $template['id'] ? 'selected' : '' ?>><?= escape($template['name']) ?> — <?= escape($template['subject']) ?></option><?php endforeach; ?></select></label>
         <div class="grid">
             <label>Absendername<input name="from_name" maxlength="160" required value="<?= escape($editing['from_name'] ?? '') ?>"></label>
             <label>Absenderadresse<input type="email" name="from_email" maxlength="254" required value="<?= escape($editing['from_email'] ?? '') ?>"></label>
@@ -276,6 +290,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <label>Plain-Text-Alternative (muss `{{unsubscribe_url}}` enthalten)<textarea name="text_content" maxlength="1000000" required><?= escape($editing['text_content'] ?? '') ?></textarea></label>
         <button type="submit">Entwurf speichern</button>
     </form>
+    <script src="/assets/js/campaign-template.js" defer></script>
     <?php endif; ?>
 </section>
 <section class="panel spaced-top">

@@ -4,8 +4,9 @@ require_once dirname(__DIR__) . '/app/Mailer.php';
 
 $config = [
     'app' => [
-        'url' => 'https://mail.example.test',
+        'url' => 'http://mail.example.test/cms',
         'encryption_key' => str_repeat('a', 64),
+        'allow_insecure_http' => true,
     ],
 ];
 $encrypted = \MailMarketing\encrypt_secret('test-secret', $config);
@@ -32,9 +33,19 @@ $personalized = \MailMarketing\personalize('{{firstname}} {{email}} {{unsubscrib
     'email' => 'person@example.test',
     'first_name' => '<User>',
     'last_name' => '',
-], 'https://mail.example.test/unsubscribe?t=abc');
+], $url);
 if (str_contains($personalized, '<User>') || !str_contains($personalized, '&lt;User&gt;') ||
-    !str_contains($personalized, 'https://mail.example.test/unsubscribe')) {
+    !str_contains($personalized, 'http://mail.example.test/cms/unsubscribe')) {
     throw new RuntimeException('Personalization escaping test failed.');
+}
+$httpConfig = $config;
+$httpConfig['app']['allow_insecure_http'] = false;
+try {
+    \MailMarketing\unsubscribe_url(42, $httpConfig);
+    throw new RuntimeException('HTTP unsubscribe URL was allowed without development opt-in.');
+} catch (RuntimeException $exception) {
+    if ($exception->getMessage() === 'HTTP unsubscribe URL was allowed without development opt-in.') {
+        throw $exception;
+    }
 }
 echo "Mailer security smoke tests passed.\n";

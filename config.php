@@ -4,7 +4,8 @@ declare(strict_types=1);
 return [
     'app' => [
         'name' => 'Mail Marketing CMS',
-        'url' => 'https://example.com',
+        'url' => 'http://localhost',
+        'allow_insecure_http' => true,
         'timezone' => 'Europe/Berlin',
         'debug' => false,
         'session_timeout' => 1800,

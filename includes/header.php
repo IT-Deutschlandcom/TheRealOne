@@ -18,7 +18,13 @@ $admin = current_admin();
             <a href="/admin/dashboard.php">Übersicht</a>
             <a href="/admin/email-lists.php">Email Lists</a>
             <a href="/admin/campaigns.php">Campaign Manager</a>
+            <a href="/admin/templates.php">Templates</a>
+            <a href="/admin/deliverability.php">Deliverability</a>
+            <a href="/admin/system-health.php">System Health</a>
+            <a href="/admin/proxy-manager.php">Proxy Manager</a>
             <?php if (in_array($admin['role'] ?? '', ['superadmin', 'admin'], true)): ?><a href="/admin/smtp-settings.php">SMTP Settings</a><?php endif; ?>
+            <?php if (in_array($admin['role'] ?? '', ['superadmin', 'admin'], true)): ?><a href="/admin/bounce-settings.php">Bounces</a><?php endif; ?>
+            <?php if (in_array($admin['role'] ?? '', ['superadmin', 'admin'], true)): ?><a href="/admin/exports.php">Exports</a><?php endif; ?>
         </nav>
         <div class="sidebar-user">
             <span><?= escape($admin['email'] ?? '') ?></span>
@@ -33,3 +39,4 @@ $admin = current_admin();
             <p class="eyebrow">Administration</p>
             <h1><?= escape($pageTitle) ?></h1>
         </header>
+        <?php if (parse_url((string) ($config['app']['url'] ?? ''), PHP_URL_SCHEME) === 'http'): ?><div class="alert alert-error">HTTP-Testbetrieb: Login, Passwörter und Abmeldetoken werden unverschlüsselt übertragen. Nur lokal/abgeschottet testen; für öffentliche Nutzung HTTPS aktivieren.</div><?php endif; ?>

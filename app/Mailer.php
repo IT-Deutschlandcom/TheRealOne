@@ -168,8 +168,14 @@ function unsubscribe_url(int $contactId, array $config): string
     $token = rtrim(strtr(base64_encode((string) $contactId), '+/', '-_'), '=');
     $signature = hash_hmac('sha256', $token, $key);
     $base = rtrim((string) ($config['app']['url'] ?? ''), '/');
-    if ($base === '' || !filter_var($base, FILTER_VALIDATE_URL) || parse_url($base, PHP_URL_SCHEME) !== 'https') {
-        throw new RuntimeException('app.url muss als öffentliche HTTPS-Adresse konfiguriert sein.');
+    $scheme = parse_url($base, PHP_URL_SCHEME);
+    $parts = parse_url($base);
+    $allowHttp = ($config['app']['allow_insecure_http'] ?? false) === true;
+    if ($base === '' || !filter_var($base, FILTER_VALIDATE_URL) ||
+        !is_array($parts) || empty($parts['host']) || isset($parts['query']) || isset($parts['fragment']) ||
+        !in_array($scheme, $allowHttp ? ['http', 'https'] : ['https'], true) ||
+        isset($parts['user']) || isset($parts['pass'])) {
+        throw new RuntimeException('app.url muss eine gültige HTTPS-Adresse sein (HTTP nur bei expliziter Entwicklungsfreigabe).');
     }
     return $base . '/unsubscribe.php?t=' . rawurlencode($token . '.' . $signature);
 }
