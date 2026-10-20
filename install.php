@@ -18,6 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $pdo->beginTransaction();
+            $pdo->query('SELECT id FROM roles WHERE id = 1 FOR UPDATE')->fetch();
+            if ((int) $pdo->query('SELECT COUNT(*) FROM admins')->fetchColumn() > 0) {
+                throw new RuntimeException('Ein Administrator wurde bereits eingerichtet.');
+            }
             $insert = $pdo->prepare(
                 'INSERT INTO admins (role_id, email, password_hash, is_active) VALUES (1, :email, :hash, 1)'
             );
@@ -29,12 +33,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_activity($pdo, $id, 'admin.install');
             $pdo->commit();
             redirect('/login.php?installed=1');
-        } catch (PDOException $exception) {
+        } catch (Throwable $exception) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            error_log('Initial admin setup failed: ' . $exception->getMessage());
-            $error = 'Administrator konnte nicht erstellt werden. Prüfen Sie die Datenbank und versuchen Sie es erneut.';
+            if ($exception instanceof RuntimeException) {
+                $error = $exception->getMessage();
+            } else {
+                error_log('Initial admin setup failed: ' . $exception->getMessage());
+                $error = 'Administrator konnte nicht erstellt werden. Prüfen Sie die Datenbank und versuchen Sie es erneut.';
+            }
         }
     }
 }
