@@ -75,7 +75,7 @@ function create_mailer(array $profile): PHPMailer
     $mailer->Username = (string) $profile['username'];
     $mailer->Password = (string) $profile['password'];
     $mailer->Timeout = (int) $profile['timeout_seconds'];
-    $mailer->SMTPKeepAlive = false;
+    $mailer->SMTPKeepAlive = true;
     $mailer->SMTPDebug = 0;
     $mailer->CharSet = PHPMailer::CHARSET_UTF8;
     $mailer->SMTPOptions = [
@@ -133,12 +133,14 @@ function send_campaign_message(array $profile, array $campaign, array $contact, 
         $mailer->send();
         $reply = (string) $mailer->getSMTPInstance()->getLastReply();
         preg_match('/\b([245]\d\d)\b/', $reply, $matches);
+        $mailer->smtpClose();
         return ['accepted' => true, 'smtp_code' => isset($matches[1]) ? (int) $matches[1] : null, 'error' => null];
     } catch (\Throwable $exception) {
         // A broken connection during DATA may leave SMTP acceptance unknown; don't resend automatically.
         $reply = (string) $mailer->getSMTPInstance()->getLastReply();
         preg_match('/^\s*([45]\d\d)\b/', $reply, $matches);
         $code = isset($matches[1]) ? (int) $matches[1] : null;
+        $mailer->smtpClose();
         return [
             'accepted' => false,
             'smtp_code' => $code,
