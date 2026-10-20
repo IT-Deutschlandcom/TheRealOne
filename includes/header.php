@@ -17,6 +17,7 @@ $admin = current_admin();
         <nav aria-label="Hauptnavigation">
             <a href="/admin/dashboard.php">Übersicht</a>
             <a href="/admin/email-lists.php">Email Lists</a>
+            <a href="/admin/campaigns.php">Campaign Manager</a>
         </nav>
         <div class="sidebar-user">
             <span><?= escape($admin['email'] ?? '') ?></span>

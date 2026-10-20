@@ -123,3 +123,26 @@ CREATE TABLE email_imports (
     CONSTRAINT fk_imports_list FOREIGN KEY (list_id) REFERENCES email_lists(id) ON DELETE CASCADE,
     CONSTRAINT fk_imports_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE campaigns (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    list_id BIGINT UNSIGNED NOT NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    name VARCHAR(180) NOT NULL,
+    from_name VARCHAR(160) NOT NULL,
+    from_email VARCHAR(254) NOT NULL,
+    reply_to VARCHAR(254) NULL,
+    subject VARCHAR(255) NOT NULL,
+    html_content MEDIUMTEXT NOT NULL,
+    text_content MEDIUMTEXT NOT NULL,
+    status ENUM('draft', 'archived') NOT NULL DEFAULT 'draft',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_campaigns_status_updated (status, updated_at),
+    KEY ix_campaigns_list_status (list_id, status),
+    CONSTRAINT fk_campaigns_list FOREIGN KEY (list_id) REFERENCES email_lists(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_campaigns_created_by FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_campaigns_updated_by FOREIGN KEY (updated_by) REFERENCES admins(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
