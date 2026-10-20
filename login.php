@@ -42,4 +42,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <label>E-Mail-Adresse<input type="email" name="email" autocomplete="username" required></label>
 <label>Passwort<input type="password" name="password" autocomplete="current-password" required></label>
 <button type="submit">Anmelden</button>
-</form></main></body></html>
+</form></main><script src="/assets/js/ui-effects.js" defer></script></body></html>
