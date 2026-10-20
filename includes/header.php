@@ -18,6 +18,7 @@ $admin = current_admin();
             <a href="/admin/dashboard.php">Übersicht</a>
             <a href="/admin/email-lists.php">Email Lists</a>
             <a href="/admin/campaigns.php">Campaign Manager</a>
+            <?php if (in_array($admin['role'] ?? '', ['superadmin', 'admin'], true)): ?><a href="/admin/smtp-settings.php">SMTP Settings</a><?php endif; ?>
         </nav>
         <div class="sidebar-user">
             <span><?= escape($admin['email'] ?? '') ?></span>

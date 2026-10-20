@@ -18,7 +18,9 @@ session_set_cookie_params([
 ]);
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
-session_start();
+if (PHP_SAPI !== 'cli') {
+    session_start();
+}
 
 try {
     $pdo = Database::connection($GLOBALS['config']);
