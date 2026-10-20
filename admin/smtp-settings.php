@@ -17,6 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Speichern und aktivieren Sie zuerst ein SMTP-Profil.');
             }
             $testResult = \MailMarketing\test_smtp_connection($profile);
+            $pdo->prepare(
+                'UPDATE smtp_profiles SET last_test_at=UTC_TIMESTAMP(), last_test_success=:success WHERE id=:id'
+            )->execute(['success' => $testResult['ok'] ? 1 : 0, 'id' => $profile['id']]);
             log_activity($pdo, (int) $admin['id'], 'smtp.connection_test', ['success' => $testResult['ok']]);
         } elseif ($action === 'save') {
             \MailMarketing\encryption_key($config);
@@ -35,8 +38,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 !$timeout || $timeout > 60 || strlen($password) > 2000 || strlen($username) > 254) {
                 throw new RuntimeException('Bitte prüfen Sie Hostname, Port, Absender und Zeitlimit.');
             }
+            if (($encryption === 'none' && $username !== '') || ($username === '' && $password !== '')) {
+                throw new RuntimeException('SMTP-Anmeldedaten sind nur mit TLS/SSL zulässig; ohne Benutzername darf kein Passwort gespeichert werden.');
+            }
             $existing = $pdo->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1')->fetch();
-            $encrypted = $existing['password_encrypted'] ?? null;
+            $encrypted = $username === '' ? null : ($existing['password_encrypted'] ?? null);
             if ($password !== '') {
                 $encrypted = \MailMarketing\encrypt_secret($password, $config);
             }
@@ -49,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $save = $pdo->prepare(
                     'UPDATE smtp_profiles SET name=:name, host=:host, port=:port, encryption=:encryption,
                      username=:username, password_encrypted=:password, from_email=:from_email,
-                     from_name=:from_name, timeout_seconds=:timeout, is_active=1, updated_by=:admin WHERE id=:id'
+                     from_name=:from_name, timeout_seconds=:timeout, is_active=1,
+                     last_test_at=NULL, last_test_success=NULL, updated_by=:admin WHERE id=:id'
                 );
                 $save->execute([
                     'name' => 'Standard', 'host' => $host, 'port' => $port, 'encryption' => $encryption,
@@ -59,11 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $save = $pdo->prepare(
                     'INSERT INTO smtp_profiles
-                     (name, host, port, encryption, username, password_encrypted, from_email, from_name, timeout_seconds, is_active, updated_by)
-                     VALUES ("Standard", :host, :port, :encryption, :username, :password, :from_email, :from_name, :timeout, 1, :admin)'
+                     (name, host, port, encryption, username, password_encrypted, from_email, from_name, timeout_seconds, is_active, last_test_at, last_test_success, updated_by)
+                     VALUES (:name, :host, :port, :encryption, :username, :password, :from_email, :from_name, :timeout, 1, NULL, NULL, :admin)'
                 );
                 $save->execute([
-                    'host' => $host, 'port' => $port, 'encryption' => $encryption,
+                    'name' => 'Standard', 'host' => $host, 'port' => $port, 'encryption' => $encryption,
                     'username' => $username ?: null, 'password' => $encrypted, 'from_email' => $fromEmail,
                     'from_name' => $fromName, 'timeout' => $timeout, 'admin' => $admin['id'],
                 ]);
@@ -104,6 +111,7 @@ require dirname(__DIR__) . '/includes/header.php';
 <?php if ($testResult !== null): ?><div class="alert <?= $testResult['ok'] ? '' : 'alert-error' ?>"><?= $testResult['ok'] ? 'Verbindung erfolgreich' : 'Verbindung fehlgeschlagen' ?> · <?= (int) $testResult['elapsed_ms'] ?> ms · <?= escape($testResult['message']) ?></div><?php endif; ?>
 <section class="panel">
     <h2>Aktives SMTP-Profil</h2>
+    <p class="muted">Letzter Verbindungstest: <?= !empty($profile['last_test_at']) ? escape($profile['last_test_at']) . (!empty($profile['last_test_success']) ? ' · erfolgreich' : ' · fehlgeschlagen') : 'noch nicht durchgeführt' ?></p>
     <?php if (!$keyReady): ?><div class="alert alert-error">SMTP-Konfiguration ist gesperrt, bis ein sicherer Verschlüsselungsschlüssel in config.php hinterlegt ist.</div><?php endif; ?>
     <p class="muted">Das Passwort wird mit AES-256-GCM verschlüsselt gespeichert und nie erneut im Formular angezeigt. TLS-Zertifikate werden validiert. Verwenden Sie nur einen SMTP-Server, für den Sie ausdrücklich autorisiert sind.</p>
     <form method="post" class="form-grid">
@@ -123,7 +131,7 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
         <div class="actions"><button type="submit" <?= !$keyReady ? 'disabled' : '' ?>>Profil speichern</button></div>
     </form>
-    <form method="post" style="margin-top:12px">
+    <form method="post" class="spaced-top-small">
         <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="action" value="test">
         <button class="button-secondary" type="submit">Test SMTP Connection</button>
     </form>

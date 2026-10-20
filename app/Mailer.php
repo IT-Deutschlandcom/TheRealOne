@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace MailMarketing;
 
-use PHPMailer\PHPMailer\Exception as MailException;
 use PHPMailer\PHPMailer\PHPMailer;
 use RuntimeException;
 
@@ -103,6 +102,7 @@ function test_smtp_connection(array $profile): array
         $connected = $mailer->smtpConnect();
         $elapsed = (int) round((microtime(true) - $startedAt) * 1000);
         if (!$connected) {
+            $mailer->smtpClose();
             return ['ok' => false, 'elapsed_ms' => $elapsed, 'message' => 'SMTP-Verbindung oder Authentifizierung fehlgeschlagen.'];
         }
         $reply = (string) $mailer->getSMTPInstance()->getLastReply();

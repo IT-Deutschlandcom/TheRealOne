@@ -20,6 +20,11 @@ try {
          last_error='Worker wurde während der SMTP-Übertragung unterbrochen; Annahmestatus unbekannt.'
          WHERE status='processing' AND processing_started_at < UTC_TIMESTAMP() - INTERVAL 5 MINUTE"
     );
+    $pdo->exec(
+        "UPDATE campaigns c JOIN campaign_queue q ON q.campaign_id=c.id
+         SET c.status='paused', c.next_send_at=NULL
+         WHERE c.status='sending' AND q.status='unknown'"
+    );
 
     $pdo->beginTransaction();
     $queue = $pdo->query(
@@ -70,7 +75,12 @@ try {
         exit(0);
     }
 
-    $profile = \MailMarketing\active_smtp_profile($pdo, $config);
+    try {
+        $profile = \MailMarketing\active_smtp_profile($pdo, $config);
+    } catch (Throwable $exception) {
+        error_log('Active SMTP profile could not be loaded; campaign paused.');
+        $profile = null;
+    }
     if (!$profile) {
         $pdo->prepare(
             "UPDATE campaign_queue SET status='queued', available_at=DATE_ADD(UTC_TIMESTAMP(), INTERVAL 5 MINUTE),
@@ -110,17 +120,25 @@ try {
         (int) $queue['attempts'] + 1 < (int) ($config['mailer']['max_attempts'] ?? 3);
     $status = $result['accepted'] ? 'accepted' : ($result['smtp_code'] !== null ? 'failed' : 'unknown');
     $finish = $pdo->prepare(
-        'UPDATE campaign_queue SET status=:status, available_at=IF(:retry=1,
+        'UPDATE campaign_queue SET status=:status, available_at=IF(:retry_available=1,
          DATE_ADD(UTC_TIMESTAMP(), INTERVAL GREATEST(60, attempts * 300) SECOND), available_at),
-         processing_started_at=NULL, completed_at=IF(:retry=1,NULL,UTC_TIMESTAMP()), smtp_code=:smtp_code,
+         processing_started_at=NULL, completed_at=IF(:retry_complete=1,NULL,UTC_TIMESTAMP()), smtp_code=:smtp_code,
          last_error=:error WHERE id=:id AND status="processing"'
     );
     $finish->execute([
-        'status' => $temporaryRetry ? 'queued' : $status, 'retry' => $temporaryRetry ? 1 : 0,
+        'status' => $temporaryRetry ? 'queued' : $status,
+        'retry_available' => $temporaryRetry ? 1 : 0,
+        'retry_complete' => $temporaryRetry ? 1 : 0,
         'smtp_code' => $result['smtp_code'],
         'error' => $result['error'], 'id' => $queue['queue_id'],
     ]);
-    advance_campaign($pdo, (int) $queue['campaign_id']);
+    if ($status === 'unknown' || in_array($result['smtp_code'], [421, 530, 535], true)) {
+        $pdo->prepare("UPDATE campaigns SET status='paused', next_send_at=NULL WHERE id=:id AND status='sending'")
+            ->execute(['id' => $queue['campaign_id']]);
+        error_log('Campaign paused after uncertain SMTP status or critical SMTP response.');
+    } else {
+        advance_campaign($pdo, (int) $queue['campaign_id']);
+    }
     fwrite(STDOUT, "Campaign queue item {$queue['queue_id']}: {$status}\n");
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {

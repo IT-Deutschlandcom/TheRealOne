@@ -161,6 +161,8 @@ CREATE TABLE smtp_profiles (
     from_name VARCHAR(160) NOT NULL,
     timeout_seconds TINYINT UNSIGNED NOT NULL DEFAULT 20,
     is_active TINYINT(1) NOT NULL DEFAULT 0,
+    last_test_at DATETIME NULL,
+    last_test_success TINYINT(1) NULL,
     updated_by BIGINT UNSIGNED NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

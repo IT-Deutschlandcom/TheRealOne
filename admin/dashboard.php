@@ -18,7 +18,7 @@ require dirname(__DIR__) . '/includes/header.php';
     <article class="stat-card"><p class="muted">Gesperrte Adressen</p><div class="stat-value"><?= number_format($stats['suppressed']) ?></div></article>
     <article class="stat-card"><p class="muted">Kampagnenentwürfe</p><div class="stat-value"><?= number_format($stats['drafts']) ?></div></article>
 </section>
-<section class="panel stack" style="margin-top:18px">
+<section class="panel stack spaced-top">
     <h2>Systemstatus</h2>
     <p class="muted">Kampagnen lassen sich als Entwürfe bearbeiten. SMTP-Versand und Kampagnenstart sind derzeit nicht verfügbar.</p>
     <div class="actions"><a class="button" href="/admin/email-lists.php">Email Lists öffnen</a><a class="button button-secondary" href="/admin/campaigns.php">Campaign Manager öffnen</a></div>

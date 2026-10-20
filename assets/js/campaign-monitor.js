@@ -16,9 +16,8 @@
                 const node = root.querySelector(`[data-stat="${key}"]`);
                 if (node) node.textContent = String(value);
             }
-            progress.style.width = `${data.stats.progress}%`;
-            progress.textContent = `${data.stats.progress}%`;
-            progress.parentElement.setAttribute('aria-valuenow', String(data.stats.progress));
+            progress.value = data.stats.progress;
+            document.getElementById('monitor-percent').textContent = `${data.stats.progress}%`;
             events.replaceChildren();
             if (!data.events.length) {
                 const row = document.createElement('tr');

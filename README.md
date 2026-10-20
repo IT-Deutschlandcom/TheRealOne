@@ -17,7 +17,7 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 ## Installation
 
 1. Eine leere Datenbank und einen eingeschränkten Datenbankbenutzer erstellen.
-2. Für eine Neuinstallation `/home/runner/work/TheRealOne/TheRealOne/database.sql` importieren. Die Datei legt `marketing_cms` an; bei abweichendem Datenbanknamen `USE marketing_cms` vor dem Import anpassen.
+2. Für eine Neuinstallation `database.sql` importieren. Die Datei legt `marketing_cms` an; bei abweichendem Datenbanknamen `USE marketing_cms` vor dem Import anpassen.
 3. Für eine bestehende Installation aus der vorherigen CMS-Version statt des Neuimports einmalig `database-migration-delivery.sql` auf der CMS-Datenbank ausführen. Bei einem abweichenden Datenbanknamen die `USE`-Zeile anpassen. Vorher ein Datenbankbackup erstellen; das Migrationsskript ist nicht für wiederholte Ausführung vorgesehen.
 4. `config.php` bearbeiten:
    - Datenbankzugang eintragen.
@@ -26,8 +26,10 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 
      ```powershell
      $bytes = New-Object byte[] 32
-     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+     $rng.GetBytes($bytes)
      ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+     $rng.Dispose()
      ```
 
    **Den Schlüssel sicher sichern und dauerhaft beibehalten.** SMTP-Passwörter und Abmeldesignaturen können bei Schlüsselverlust nicht mehr entschlüsselt bzw. geprüft werden.
@@ -39,7 +41,7 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 
 ## Automatischer Versand unter Windows
 
-Der Browser muss nicht geöffnet bleiben. Der Worker verarbeitet pro Aufruf höchstens eine Nachricht. Die Windows-Aufgabe startet ihn jede Minute; das Kampagnenintervall ist die Mindestzeit zwischen Nachrichten derselben Kampagne. Standard sind **180 Sekunden**, im Entwurf einstellbar von **60 bis 86400 Sekunden**. Durch das minütliche Polling kann eine Nachricht nach Fälligkeit bis zu etwa eine weitere Minute warten. Kleine Intervallwerte umgehen weder Provider-Limits noch diese Polling-Grenze.
+Der Browser muss nicht geöffnet bleiben. Der Worker verarbeitet pro Aufruf höchstens eine Nachricht. Die Windows-Aufgabe startet ihn jede Minute; das Kampagnenintervall ist die Mindestzeit zwischen Nachrichten derselben Kampagne. Standard sind **180 Sekunden**, im Entwurf einstellbar von **60 bis 86400 Sekunden** und während des Versands im Panel veränderbar. Durch das minütliche Polling kann eine Nachricht nach Fälligkeit bis zu etwa eine weitere Minute warten. Kleine Intervallwerte umgehen weder Provider-Limits noch diese Polling-Grenze.
 
 PowerShell als Administrator öffnen und die Pfade anpassen:
 
@@ -61,7 +63,8 @@ Die Aufgabe läuft als `SYSTEM`, startet nur eine Instanz gleichzeitig, protokol
 
 - `accepted` bedeutet Annahme durch den SMTP-Server, nicht bestätigte Zustellung.
 - Explizite SMTP-4xx-Ablehnungen werden mit begrenzter Wartezeit und bis zu `mailer.max_attempts` wiederholt. Explizite SMTP-Fehlercodes werden als fehlgeschlagen protokolliert.
-- Verbindungsabbrüche ohne klaren SMTP-Antwortcode erhalten den Status `unknown` und werden **nicht automatisch erneut gesendet**, weil der Server die Nachricht möglicherweise bereits angenommen hatte. Nach einem Worker-Absturz wird eine solche laufende Nachricht ebenfalls nicht blind wiederholt.
+- Verbindungsabbrüche ohne klaren SMTP-Antwortcode erhalten den Status `unknown`, pausieren die Kampagne und werden **nicht automatisch erneut gesendet**, weil der Server die Nachricht möglicherweise bereits angenommen hatte. Nach einem Worker-Absturz wird eine solche laufende Nachricht ebenfalls nicht blind wiederholt.
+- Kritische Antworten (z. B. nicht autorisierte SMTP-Anmeldung) pausieren die Kampagne, damit nicht wiederholt an weitere Empfänger mit einer fehlerhaften Konfiguration gesendet wird. Nach Korrektur der Konfiguration muss ein Administrator die Kampagne bewusst fortsetzen.
 - Jede Nachricht enthält signierte individuelle Abmeldelinks sowie `List-Unsubscribe`- und `List-Unsubscribe-Post`-Header. Eine Abmeldung setzt den Kontakt auf `unsubscribed`, fügt ihn der zentralen Suppression-Liste hinzu und entfernt ausstehende Empfängerjobs. Die passende öffentliche HTTPS-URL muss in `app.url` stimmen.
 - Das CMS stellt keine DKIM-Signierung bereit. Für Posteingangszustellung sind eigene SPF-, DKIM- und DMARC-Konfiguration und die SMTP-Provider-Vorgaben erforderlich; der technische SMTP-Test garantiert keine Zustellung.
 - Versand darf nur an Kontakte mit gültiger, nachweisbarer Rechtsgrundlage erfolgen. Keine gekauften oder gescrapten Verteiler importieren. Keine Proxy-Rotation oder Provider-Limit-Umgehung.

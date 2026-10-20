@@ -11,7 +11,9 @@ $LogDirectory = Join-Path $ProjectPath 'storage\logs'
 New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
 $LogFile = Join-Path $LogDirectory ("worker-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
 if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt 5MB) {
-    $LogFile = Join-Path $LogDirectory ("worker-{0}-{1}.log" -f (Get-Date -Format 'yyyy-MM-dd'), [guid]::NewGuid().ToString('N'))
+    $Archive = "$LogFile.1"
+    Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $LogFile -Destination $Archive
 }
 $Stdout = Join-Path $LogDirectory 'worker.stdout.tmp'
 $Stderr = Join-Path $LogDirectory 'worker.stderr.tmp'

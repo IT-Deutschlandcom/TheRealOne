@@ -23,7 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($action === 'start') {
             \MailMarketing\unsubscribe_url(1, $config);
-            if (!\MailMarketing\active_smtp_profile($pdo, $config)) {
+            $smtpProfile = \MailMarketing\active_smtp_profile($pdo, $config);
+            if (!$smtpProfile || (int) ($smtpProfile['last_test_success'] ?? 0) !== 1) {
                 throw new RuntimeException('Konfigurieren und testen Sie zuerst ein SMTP-Profil.');
             }
             $interval = filter_var($_POST['send_interval_seconds'] ?? null, FILTER_VALIDATE_INT);
@@ -31,11 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Das Sendeintervall muss zwischen 60 und 86400 Sekunden liegen.');
             }
             $pdo->beginTransaction();
-            $campaignQuery = $pdo->prepare("SELECT id, list_id, status FROM campaigns WHERE id=:id FOR UPDATE");
+            $campaignQuery = $pdo->prepare("SELECT id, list_id, status, from_email, html_content, text_content FROM campaigns WHERE id=:id FOR UPDATE");
             $campaignQuery->execute(['id' => $id]);
             $campaign = $campaignQuery->fetch();
             if (!$campaign || $campaign['status'] !== 'draft') {
                 throw new RuntimeException('Nur Kampagnenentwürfe können gestartet werden.');
+            }
+            if (!str_contains($campaign['html_content'], '{{unsubscribe_url}}') ||
+                !str_contains($campaign['text_content'], '{{unsubscribe_url}}')) {
+                throw new RuntimeException('HTML- und Plain-Text-Inhalt benötigen jeweils {{unsubscribe_url}}.');
+            }
+            if (strcasecmp($campaign['from_email'], (string) $smtpProfile['from_email']) !== 0) {
+                throw new RuntimeException('Die Kampagnen-Absenderadresse muss dem aktivierten SMTP-Profil entsprechen.');
             }
             $enqueue = $pdo->prepare(
                 "INSERT IGNORE INTO campaign_queue (campaign_id, contact_id, available_at)
@@ -132,8 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ($replyTo !== '' && (!filter_var($replyTo, FILTER_VALIDATE_EMAIL) || strlen($replyTo) > 254)) ||
                 text_length($subject) < 1 || text_length($subject) > 255 ||
                 strlen($html) > 1_000_000 || strlen($text) > 1_000_000 ||
+                !str_contains($html, '{{unsubscribe_url}}') || !str_contains($text, '{{unsubscribe_url}}') ||
                 !$interval || $interval < 60 || $interval > 86400) {
-                throw new RuntimeException('Bitte prüfen Sie die Pflichtfelder und Eingabelängen.');
+                throw new RuntimeException('Bitte prüfen Sie die Pflichtfelder, Eingabelängen und Abmeldelinks in beiden E-Mail-Formaten.');
             }
             $listQuery = $pdo->prepare('SELECT id FROM email_lists WHERE id = :id');
             $listQuery->execute(['id' => $listId]);
@@ -206,6 +215,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('Unbekannte Aktion.');
         }
     } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         if ($exception instanceof RuntimeException) {
             $error = $exception->getMessage();
         } else {
@@ -260,13 +272,13 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
         <label>Betreff<input name="subject" maxlength="255" required value="<?= escape($editing['subject'] ?? '') ?>"></label>
         <label>Intervall zwischen E-Mails (Sekunden; 60–86400)<input type="number" name="send_interval_seconds" min="60" max="86400" value="<?= escape($editing['send_interval_seconds'] ?? 180) ?>" required></label>
-        <label>HTML-Inhalt<textarea name="html_content" maxlength="1000000"><?= escape($editing['html_content'] ?? '') ?></textarea></label>
-        <label>Plain-Text-Alternative<textarea name="text_content" maxlength="1000000"><?= escape($editing['text_content'] ?? '') ?></textarea></label>
+        <label>HTML-Inhalt (muss `{{unsubscribe_url}}` enthalten)<textarea name="html_content" maxlength="1000000" required><?= escape($editing['html_content'] ?? '') ?></textarea></label>
+        <label>Plain-Text-Alternative (muss `{{unsubscribe_url}}` enthalten)<textarea name="text_content" maxlength="1000000" required><?= escape($editing['text_content'] ?? '') ?></textarea></label>
         <button type="submit">Entwurf speichern</button>
     </form>
     <?php endif; ?>
 </section>
-<section class="panel" style="margin-top:18px">
+<section class="panel spaced-top">
     <h2>Kampagnen</h2>
     <div class="table-wrap"><table><thead><tr><th>Name / Betreff</th><th>Liste</th><th>Status</th><th>Warteschlange</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody>
     <?php foreach ($campaigns as $campaign): ?><tr>
@@ -279,10 +291,10 @@ require dirname(__DIR__) . '/includes/header.php';
             <?php if ($campaign['status'] === 'sending'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="pause"><button class="button-secondary" type="submit">Pause</button></form><?php endif; ?>
             <?php if ($campaign['status'] === 'paused'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="resume"><button type="submit">Fortsetzen</button></form><?php endif; ?>
             <?php if (in_array($campaign['status'], ['sending','paused'], true)): ?><form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="interval"><input type="number" aria-label="Intervall in Sekunden" name="send_interval_seconds" min="60" max="86400" value="<?= (int) $campaign['send_interval_seconds'] ?>" required><button class="button-secondary" type="submit">Intervall ändern</button></form><?php endif; ?>
-            <?php if ($campaign['status'] === 'draft'): ?><form method="post" onsubmit="return confirm('Versand an berechtigte Kontakte starten?');"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="start"><input type="hidden" name="send_interval_seconds" value="<?= (int) $campaign['send_interval_seconds'] ?>"><button type="submit">Start</button></form><?php endif; ?>
-            <?php if (in_array($campaign['status'], ['sending','paused'], true)): ?><form method="post" onsubmit="return confirm('Kampagne abbrechen?');"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="cancel"><button class="button-danger" type="submit">Abbrechen</button></form><?php endif; ?>
+            <?php if ($campaign['status'] === 'draft'): ?><form method="post" data-confirm="Versand an berechtigte Kontakte starten?"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="start"><input type="hidden" name="send_interval_seconds" value="<?= (int) $campaign['send_interval_seconds'] ?>"><button type="submit">Start</button></form><?php endif; ?>
+            <?php if (in_array($campaign['status'], ['sending','paused'], true)): ?><form method="post" data-confirm="Kampagne abbrechen?"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="cancel"><button class="button-danger" type="submit">Abbrechen</button></form><?php endif; ?>
             <form method="post"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="duplicate"><button class="button-secondary" type="submit">Duplizieren</button></form>
-            <?php if ($campaign['status'] === 'draft'): ?><form method="post" onsubmit="return confirm('Kampagne archivieren?');"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="archive"><button class="button-danger" type="submit">Archivieren</button></form><?php endif; ?>
+            <?php if ($campaign['status'] === 'draft'): ?><form method="post" data-confirm="Kampagne archivieren?"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>"><input type="hidden" name="action" value="archive"><button class="button-danger" type="submit">Archivieren</button></form><?php endif; ?>
         </div><?php else: ?><span class="muted">Nur Ansicht</span><?php endif; ?></td>
     </tr><?php endforeach; ?>
     <?php if ($campaigns === []): ?><tr><td colspan="6" class="muted">Noch keine Kampagnenentwürfe.</td></tr><?php endif; ?>

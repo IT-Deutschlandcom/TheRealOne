@@ -176,7 +176,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <form method="post" class="inline-form">
             <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
             <input type="hidden" name="action" value="create">
-            <label style="flex:1">Listenname<input name="name" maxlength="150" required></label>
+            <label class="flex-grow">Listenname<input name="name" maxlength="150" required></label>
             <button type="submit">Erstellen</button>
         </form>
     </section>
@@ -187,7 +187,7 @@ require dirname(__DIR__) . '/includes/header.php';
             <td><?= escape($list['name']) ?></td><td><?= number_format((int) $list['contact_count']) ?></td><td><?= escape($list['created_at']) ?></td>
             <td><div class="actions">
                 <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="action" value="rename"><input type="hidden" name="list_id" value="<?= (int) $list['id'] ?>"><input aria-label="Neuer Listenname" name="name" maxlength="150" required><button class="button-secondary" type="submit">Umbenennen</button></form>
-                <form method="post" onsubmit="return confirm('Liste wirklich löschen? Kontakte und Sperren bleiben erhalten.');"><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="list_id" value="<?= (int) $list['id'] ?>"><button class="button-danger" type="submit">Löschen</button></form>
+                <form method="post" data-confirm="Liste wirklich löschen? Kontakte und Sperren bleiben erhalten."><input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="list_id" value="<?= (int) $list['id'] ?>"><button class="button-danger" type="submit">Löschen</button></form>
             </div></td>
         </tr><?php endforeach; ?>
         <?php if ($lists === []): ?><tr><td colspan="4" class="muted">Noch keine Listen vorhanden.</td></tr><?php endif; ?>
@@ -206,7 +206,7 @@ require dirname(__DIR__) . '/includes/header.php';
                 <label>Datum und Uhrzeit der Grundlage<input type="datetime-local" name="granted_at" required></label>
             </div>
             <label>Nachweis / Herkunft der Grundlage<input name="evidence_source" maxlength="500" placeholder="z. B. Formular/Quelle und Referenz" required></label>
-            <label><span><input type="checkbox" name="permission_confirmed" required style="width:auto"> Ich bestätige, dass die dokumentierte Versandberechtigung für alle importierten Kontakte vorliegt.</span></label>
+            <label><span><input class="inline-checkbox" type="checkbox" name="permission_confirmed" required> Ich bestätige, dass die dokumentierte Versandberechtigung für alle importierten Kontakte vorliegt.</span></label>
             <button type="submit">Import prüfen und speichern</button>
         </form>
     </section>
