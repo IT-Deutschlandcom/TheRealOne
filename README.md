@@ -9,7 +9,7 @@ Die PHP-Anwendung enthält eine IIS-kompatible Grundlage für Administrator-Logi
 - Windows Server und IIS mit PHP FastCGI
 - PHP 8.2+, `pdo_mysql` und `openssl`
 - MySQL 8 oder kompatible MariaDB
-- Für Testbetrieb HTTP-URL; für öffentlichen Produktivbetrieb zwingend HTTPS
+- HTTP- oder HTTPS-URL; für öffentlichen Produktivbetrieb wird HTTPS dringend empfohlen
 - Autorisierter SMTP-Server, der vom Windows-Server erreichbar ist
 - Optional die unter Windows installierbare PHP-IMAP-Erweiterung für Bounce-Abholung
 
@@ -38,11 +38,13 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 6. `install.php` aufrufen und den ersten Administrator anlegen. Danach den HTTP-Zugriff auf `install.php` zusätzlich in IIS sperren.
 7. Als Administrator unter **SMTP Settings** den autorisierten Relay-Server konfigurieren, speichern und **Test SMTP Connection** ausführen. Dieser Test verbindet sich und authentifiziert sich, sendet aber keine Test-E-Mail.
 8. Unter **Email Lists** nur Kontakte mit belegter gültiger Versandberechtigung importieren. Der Import dokumentiert die vom Administrator angegebene Grundlage; er verifiziert nicht automatisch deren rechtliche Gültigkeit.
-9. Im Campaign Manager zuerst die gewünschte Liste und danach die **Absenderadresse** (muss der freigegebenen SMTP-Absenderadresse entsprechen) sowie Inhalte/Intervall konfigurieren. Erst beim expliziten Klick auf „Start“ werden Adressen aus dieser Liste in die Versandwarteschlange aufgenommen. HTML-Inhalt und Plain-Text-Alternative müssen beide `{{unsubscribe_url}}` enthalten. Sperrlisten werden beim Queue-Aufbau und nochmals unmittelbar vor dem Versand geprüft.
+9. Im Campaign Manager zuerst die gewünschte Liste und danach **Absendername und Absenderadresse** sowie Inhalte/Intervall konfigurieren. Diese können unabhängig vom SMTP-Profil und SMTP-Benutzernamen gewählt werden und müssen auch nicht untereinander übereinstimmen. Der SMTP-Server muss die gewählte Absenderadresse erlauben; Provider-Vorgaben werden dadurch nicht umgangen. Erst beim expliziten Klick auf „Start“ werden Adressen aus dieser Liste in die Versandwarteschlange aufgenommen. HTML-Inhalt und Plain-Text-Alternative müssen beide `{{unsubscribe_url}}` enthalten. Sperrlisten werden beim Queue-Aufbau und nochmals unmittelbar vor dem Versand geprüft.
 
-### HTTP-Testbetrieb
+### HTTP-Betrieb und SMTP-Verschlüsselung
 
-Die Anwendung akzeptiert standardmäßig `http://localhost` für lokale Tests; die Navigation zeigt auf jeder Admin-Seite einen deutlichen Warnhinweis. Bei HTTP können Passwörter, Sitzungen, SMTP-Zugangsdaten und Abmeldetoken von Dritten mitgelesen oder verändert werden. HTTP deshalb nur lokal oder in einem abgeschotteten Testnetz verwenden, nie öffentlich oder für echte Marketingkontakte. Für Produktivbetrieb `app.url` auf HTTPS ändern und HTTP in IIS auf HTTPS umleiten bzw. deaktivieren.
+Das Panel und der Kampagnenversand funktionieren mit HTTP und HTTPS ohne zusätzliche Freigabe. `app.url` muss auf die für Empfänger erreichbare Panel-Adresse zeigen, damit Abmeldelinks funktionieren; eine bisherige Einstellung `app.allow_insecure_http` wird nicht mehr ausgewertet. Die Navigation zeigt bei HTTP einen Warnhinweis, blockiert aber keine Funktionen. SMTP-STARTTLS bzw. SSL/TLS bleibt unabhängig davon aktiv und prüft weiterhin das Mailserver-Zertifikat; ein eigenes HTTPS-Zertifikat für das Panel ist dafür nicht erforderlich.
+
+SMTP-TLS/SSL schützt **nicht** die Browser-Verbindung zum Panel oder HTTP-Abmeldelinks. Bei HTTP können Passwörter, Sitzungen, SMTP-Zugangsdaten und Abmeldetoken von Dritten mitgelesen oder verändert werden. HTTP deshalb nur lokal oder in einem abgeschotteten Netz verwenden. Für öffentliche Nutzung wird dringend empfohlen, `app.url` auf HTTPS zu ändern und HTTP in IIS auf HTTPS umzuleiten bzw. zu deaktivieren.
 
 ## Automatischer Versand unter Windows
 
@@ -70,7 +72,7 @@ Die Aufgabe läuft als `SYSTEM`, startet nur eine Instanz gleichzeitig, protokol
 - Explizite SMTP-4xx-Ablehnungen werden mit begrenzter Wartezeit und bis zu `mailer.max_attempts` wiederholt. Explizite SMTP-Fehlercodes werden als fehlgeschlagen protokolliert.
 - Verbindungsabbrüche ohne klaren SMTP-Antwortcode erhalten den Status `unknown`, pausieren die Kampagne und werden **nicht automatisch erneut gesendet**, weil der Server die Nachricht möglicherweise bereits angenommen hatte. Nach einem Worker-Absturz wird eine solche laufende Nachricht ebenfalls nicht blind wiederholt.
 - Kritische Antworten (z. B. nicht autorisierte SMTP-Anmeldung) pausieren die Kampagne, damit nicht wiederholt an weitere Empfänger mit einer fehlerhaften Konfiguration gesendet wird. Nach Korrektur der Konfiguration muss ein Administrator die Kampagne bewusst fortsetzen.
-- Jede Nachricht enthält signierte individuelle Abmeldelinks sowie `List-Unsubscribe`- und `List-Unsubscribe-Post`-Header. Eine Abmeldung setzt den Kontakt auf `unsubscribed`, fügt ihn der zentralen Suppression-Liste hinzu und entfernt ausstehende Empfängerjobs. In Produktion muss `app.url` auf die öffentliche HTTPS-URL zeigen; HTTP-Links sind ausschließlich für abgeschottete Tests vorgesehen.
+- Jede Nachricht enthält signierte individuelle Abmeldelinks sowie `List-Unsubscribe`- und `List-Unsubscribe-Post`-Header. Eine Abmeldung setzt den Kontakt auf `unsubscribed`, fügt ihn der zentralen Suppression-Liste hinzu und entfernt ausstehende Empfängerjobs. HTTP- und HTTPS-Abmeldelinks werden unterstützt; für öffentliche Nutzung wird HTTPS dringend empfohlen. RFC-8058-One-Click-Abmeldung bei Mailprovidern setzt HTTPS voraus.
 - Das CMS stellt keine DKIM-Signierung bereit. Für Posteingangszustellung sind eigene SPF-, DKIM- und DMARC-Konfiguration und die SMTP-Provider-Vorgaben erforderlich; der technische SMTP-Test garantiert keine Zustellung.
 - Versand darf nur an Kontakte mit gültiger, nachweisbarer Rechtsgrundlage erfolgen. Keine gekauften oder gescrapten Verteiler importieren. Keine Proxy-Rotation oder Provider-Limit-Umgehung.
 

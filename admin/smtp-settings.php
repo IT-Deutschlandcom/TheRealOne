@@ -114,6 +114,7 @@ require dirname(__DIR__) . '/includes/header.php';
     <p class="muted">Letzter Verbindungstest: <?= !empty($profile['last_test_at']) ? escape($profile['last_test_at']) . (!empty($profile['last_test_success']) ? ' · erfolgreich' : ' · fehlgeschlagen') : 'noch nicht durchgeführt' ?></p>
     <?php if (!$keyReady): ?><div class="alert alert-error">SMTP-Konfiguration ist gesperrt, bis ein sicherer Verschlüsselungsschlüssel in config.php hinterlegt ist.</div><?php endif; ?>
     <p class="muted">Das Passwort wird mit AES-256-GCM verschlüsselt gespeichert und nie erneut im Formular angezeigt. TLS-Zertifikate werden validiert. Verwenden Sie nur einen SMTP-Server, für den Sie ausdrücklich autorisiert sind.</p>
+    <p class="muted">SMTP-TLS/SSL funktioniert unabhängig davon, ob das Panel über HTTP oder HTTPS geöffnet wird. Kampagnen dürfen einen abweichenden Absendernamen und eine abweichende Absenderadresse verwenden, soweit der SMTP-Server dies erlaubt.</p>
     <form method="post" class="form-grid">
         <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
         <input type="hidden" name="action" value="save">

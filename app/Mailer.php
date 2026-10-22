@@ -170,12 +170,11 @@ function unsubscribe_url(int $contactId, array $config): string
     $base = rtrim((string) ($config['app']['url'] ?? ''), '/');
     $scheme = parse_url($base, PHP_URL_SCHEME);
     $parts = parse_url($base);
-    $allowHttp = ($config['app']['allow_insecure_http'] ?? false) === true;
     if ($base === '' || !filter_var($base, FILTER_VALIDATE_URL) ||
         !is_array($parts) || empty($parts['host']) || isset($parts['query']) || isset($parts['fragment']) ||
-        !in_array($scheme, $allowHttp ? ['http', 'https'] : ['https'], true) ||
+        !in_array($scheme, ['http', 'https'], true) ||
         isset($parts['user']) || isset($parts['pass'])) {
-        throw new RuntimeException('app.url muss eine gültige HTTPS-Adresse sein (HTTP nur bei expliziter Entwicklungsfreigabe).');
+        throw new RuntimeException('app.url muss eine gültige HTTP- oder HTTPS-Adresse ohne Zugangsdaten, Query oder Fragment sein.');
     }
     return $base . '/unsubscribe.php?t=' . rawurlencode($token . '.' . $signature);
 }

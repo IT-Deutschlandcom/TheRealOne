@@ -42,9 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 !str_contains($campaign['text_content'], '{{unsubscribe_url}}')) {
                 throw new RuntimeException('HTML- und Plain-Text-Inhalt benötigen jeweils {{unsubscribe_url}}.');
             }
-            if (strcasecmp($campaign['from_email'], (string) $smtpProfile['from_email']) !== 0) {
-                throw new RuntimeException('Die Kampagnen-Absenderadresse muss dem aktivierten SMTP-Profil entsprechen.');
-            }
             $enqueue = $pdo->prepare(
                 "INSERT IGNORE INTO campaign_queue (campaign_id, contact_id, available_at)
                  SELECT :campaign_id, ec.id, UTC_TIMESTAMP()
@@ -282,6 +279,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <div class="grid">
             <label>Absendername<input name="from_name" maxlength="160" required value="<?= escape($editing['from_name'] ?? '') ?>"></label>
             <label>Absenderadresse<input type="email" name="from_email" maxlength="254" required value="<?= escape($editing['from_email'] ?? '') ?>"></label>
+            <p class="muted">Absendername und -adresse können unabhängig vom SMTP-Profil gewählt werden. Der SMTP-Server muss den Versand mit dieser Adresse erlauben.</p>
             <label>Antwortadresse (optional)<input type="email" name="reply_to" maxlength="254" value="<?= escape($editing['reply_to'] ?? '') ?>"></label>
         </div>
         <label>Betreff<input name="subject" maxlength="255" required value="<?= escape($editing['subject'] ?? '') ?>"></label>
