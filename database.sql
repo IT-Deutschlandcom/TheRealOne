@@ -289,6 +289,10 @@ CREATE TABLE proxies (
     CONSTRAINT fk_proxies_group FOREIGN KEY (group_id) REFERENCES proxy_groups(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+ALTER TABLE smtp_profiles
+    ADD COLUMN proxy_id BIGINT UNSIGNED NULL,
+    ADD CONSTRAINT fk_smtp_profiles_proxy FOREIGN KEY (proxy_id) REFERENCES proxies(id) ON DELETE RESTRICT;
+
 CREATE TABLE worker_heartbeats (
     worker_name VARCHAR(80) NOT NULL,
     last_seen_at DATETIME NOT NULL,

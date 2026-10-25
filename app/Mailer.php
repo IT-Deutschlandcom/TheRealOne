@@ -9,6 +9,7 @@ use RuntimeException;
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/Exception.php';
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/SMTP.php';
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/PHPMailer.php';
+require_once __DIR__ . '/Socks5SMTP.php';
 
 function encryption_key(array $config): string
 {
@@ -54,19 +55,38 @@ function decrypt_secret(?string $encrypted, array $config): string
     return $secret;
 }
 
-function active_smtp_profile(\PDO $pdo, array $config): ?array
+function active_smtp_profile(\PDO $pdo, array $config, bool $forUpdate = false): ?array
 {
-    $profile = $pdo->query('SELECT * FROM smtp_profiles WHERE is_active=1 ORDER BY id LIMIT 1')->fetch();
+    $profile = $pdo->query('SELECT * FROM smtp_profiles WHERE is_active=1 ORDER BY id LIMIT 1' . ($forUpdate ? ' FOR UPDATE' : ''))->fetch();
     if (!$profile) {
         return null;
     }
     $profile['password'] = decrypt_secret($profile['password_encrypted'], $config);
+    $profile['proxy'] = null;
+    if (!empty($profile['proxy_id'])) {
+        $query = $pdo->prepare('SELECT host, port, username, password_encrypted, is_active FROM proxies WHERE id=:id');
+        $query->execute(['id' => $profile['proxy_id']]);
+        $proxy = $query->fetch();
+        if (!$proxy || !(int) $proxy['is_active']) {
+            throw new RuntimeException('Der fest zugewiesene SMTP-Proxy ist nicht verfügbar. Kein direkter Versand möglich.');
+        }
+        $proxy['username'] = (string) $proxy['username'];
+        $proxy['password'] = decrypt_secret($proxy['password_encrypted'], $config);
+        validate_proxy($proxy['host'], (int) $proxy['port'], $proxy['username'], $proxy['password']);
+        $profile['proxy'] = $proxy;
+    }
     return $profile;
 }
 
 function create_mailer(array $profile): PHPMailer
 {
     $mailer = new PHPMailer(true);
+    if (!empty($profile['proxy_id']) && empty($profile['proxy'])) {
+        throw new RuntimeException('Die zugewiesene Proxy-Konfiguration fehlt. Direkter Versand ist gesperrt.');
+    }
+    if (!empty($profile['proxy'])) {
+        $mailer->setSMTPInstance(new Socks5SMTP($profile['proxy']));
+    }
     $mailer->isSMTP();
     $mailer->Host = $profile['host'];
     $mailer->Port = (int) $profile['port'];

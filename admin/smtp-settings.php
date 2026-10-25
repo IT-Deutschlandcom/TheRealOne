@@ -31,6 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fromEmail = trim((string) ($_POST['from_email'] ?? ''));
             $fromName = trim((string) ($_POST['from_name'] ?? ''));
             $timeout = filter_var($_POST['timeout_seconds'] ?? 20, FILTER_VALIDATE_INT);
+            $proxyValue = (string) ($_POST['proxy_id'] ?? '');
+            $proxyId = $proxyValue === '' ? null : filter_var($proxyValue, FILTER_VALIDATE_INT);
+            if ($proxyId !== null && (!$proxyId || $proxyId < 1)) {
+                throw new RuntimeException('Ungültige Proxy-Auswahl.');
+            }
             if (!preg_match('/^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/', $host) ||
                 !$port || $port > 65535 || !in_array($encryption, ['tls', 'ssl', 'none'], true) ||
                 !filter_var($fromEmail, FILTER_VALIDATE_EMAIL) || strlen($fromEmail) > 254 ||
@@ -41,7 +46,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (($encryption === 'none' && $username !== '') || ($username === '' && $password !== '')) {
                 throw new RuntimeException('SMTP-Anmeldedaten sind nur mit TLS/SSL zulässig; ohne Benutzername darf kein Passwort gespeichert werden.');
             }
-            $existing = $pdo->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1')->fetch();
+            $pdo->beginTransaction();
+            $existing = $pdo->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1 FOR UPDATE')->fetch();
+            if ((int) ($existing['proxy_id'] ?? 0) !== (int) $proxyId) {
+                $running = $pdo->query("SELECT id FROM campaigns WHERE status IN ('queued','sending','paused') LIMIT 1 FOR UPDATE")->fetchColumn();
+                if ($running) {
+                    throw new RuntimeException('Der feste Proxy kann erst geändert werden, wenn alle laufenden oder pausierten Kampagnen beendet oder abgebrochen sind.');
+                }
+            }
+            if ($proxyId !== null) {
+                $proxyQuery = $pdo->prepare('SELECT id FROM proxies WHERE id=:id AND is_active=1');
+                $proxyQuery->execute(['id' => $proxyId]);
+                if (!$proxyQuery->fetchColumn()) {
+                    throw new RuntimeException('Der ausgewählte Proxy ist nicht verfügbar.');
+                }
+            }
             $encrypted = $username === '' ? null : ($existing['password_encrypted'] ?? null);
             if ($password !== '') {
                 $encrypted = \MailMarketing\encrypt_secret($password, $config);
@@ -49,30 +68,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($username !== '' && $encrypted === null) {
                 throw new RuntimeException('Geben Sie das SMTP-Passwort ein.');
             }
-            $pdo->beginTransaction();
             $pdo->exec('UPDATE smtp_profiles SET is_active=0');
             if ($existing) {
                 $save = $pdo->prepare(
                     'UPDATE smtp_profiles SET name=:name, host=:host, port=:port, encryption=:encryption,
                      username=:username, password_encrypted=:password, from_email=:from_email,
-                     from_name=:from_name, timeout_seconds=:timeout, is_active=1,
+                     from_name=:from_name, timeout_seconds=:timeout, proxy_id=:proxy, is_active=1,
                      last_test_at=NULL, last_test_success=NULL, updated_by=:admin WHERE id=:id'
                 );
                 $save->execute([
                     'name' => 'Standard', 'host' => $host, 'port' => $port, 'encryption' => $encryption,
                     'username' => $username ?: null, 'password' => $encrypted, 'from_email' => $fromEmail,
-                    'from_name' => $fromName, 'timeout' => $timeout, 'admin' => $admin['id'], 'id' => $existing['id'],
+                    'from_name' => $fromName, 'timeout' => $timeout, 'proxy' => $proxyId, 'admin' => $admin['id'], 'id' => $existing['id'],
                 ]);
             } else {
                 $save = $pdo->prepare(
                     'INSERT INTO smtp_profiles
-                     (name, host, port, encryption, username, password_encrypted, from_email, from_name, timeout_seconds, is_active, last_test_at, last_test_success, updated_by)
-                     VALUES (:name, :host, :port, :encryption, :username, :password, :from_email, :from_name, :timeout, 1, NULL, NULL, :admin)'
+                     (name, host, port, encryption, username, password_encrypted, from_email, from_name, timeout_seconds, proxy_id, is_active, last_test_at, last_test_success, updated_by)
+                     VALUES (:name, :host, :port, :encryption, :username, :password, :from_email, :from_name, :timeout, :proxy, 1, NULL, NULL, :admin)'
                 );
                 $save->execute([
                     'name' => 'Standard', 'host' => $host, 'port' => $port, 'encryption' => $encryption,
                     'username' => $username ?: null, 'password' => $encrypted, 'from_email' => $fromEmail,
-                    'from_name' => $fromName, 'timeout' => $timeout, 'admin' => $admin['id'],
+                    'from_name' => $fromName, 'timeout' => $timeout, 'proxy' => $proxyId, 'admin' => $admin['id'],
                 ]);
             }
             log_activity($pdo, (int) $admin['id'], 'smtp.profile_updated');
@@ -96,6 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $profile = $pdo->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1')->fetch() ?: [];
+$proxies = $pdo->query(
+    'SELECT p.id,p.host,p.port,p.is_active,g.name AS group_name
+     FROM proxies p LEFT JOIN proxy_groups g ON g.id=p.group_id ORDER BY g.name,p.host,p.port'
+)->fetchAll();
 $keyReady = true;
 try {
     \MailMarketing\encryption_key($config);
@@ -118,6 +140,13 @@ require dirname(__DIR__) . '/includes/header.php';
         <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
         <input type="hidden" name="action" value="save">
         <label>SMTP-Hostname<input name="host" maxlength="253" required value="<?= escape($profile['host'] ?? '') ?>"></label>
+        <label>Fester SOCKS5-Proxy<select name="proxy_id">
+            <option value="">Kein Proxy (direkte Verbindung)</option>
+            <?php foreach ($proxies as $proxy): ?>
+                <option value="<?= (int) $proxy['id'] ?>" <?= (int) ($profile['proxy_id'] ?? 0) === (int) $proxy['id'] ? 'selected' : '' ?>><?= escape(($proxy['group_name'] ? $proxy['group_name'] . ' · ' : '') . $proxy['host'] . ':' . $proxy['port']) ?><?= !(int) $proxy['is_active'] ? ' (inaktiv, nicht verwendbar)' : '' ?></option>
+            <?php endforeach; ?>
+        </select></label>
+        <p class="muted">Proxys im Proxy Manager importieren. Die Zuordnung bleibt während laufender und pausierter Kampagnen unverändert. Bei Proxyfehlern gibt es keinen direkten Fallback. Nach einer Änderung das Profil erneut testen. SOCKS5 verschlüsselt die Proxy-Anmeldung nicht; nur vertrauenswürdige oder zusätzlich abgesicherte Proxy-Verbindungen verwenden. SMTP-TLS bleibt bis zum SMTP-Server aktiv.</p>
         <div class="grid">
             <label>Port<input type="number" name="port" min="1" max="65535" required value="<?= escape($profile['port'] ?? 587) ?>"></label>
             <label>Verschlüsselung<select name="encryption"><option value="tls" <?= ($profile['encryption'] ?? 'tls') === 'tls' ? 'selected' : '' ?>>STARTTLS</option><option value="ssl" <?= ($profile['encryption'] ?? '') === 'ssl' ? 'selected' : '' ?>>SSL/TLS</option><option value="none" <?= ($profile['encryption'] ?? '') === 'none' ? 'selected' : '' ?>>Keine (nur internes, vertrauenswürdiges Relay)</option></select></label>
