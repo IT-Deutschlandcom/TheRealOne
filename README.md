@@ -9,7 +9,7 @@ Die PHP-Anwendung enthält eine IIS-kompatible Grundlage für Administrator-Logi
 - Windows Server und IIS mit PHP FastCGI
 - PHP 8.2+, `pdo_mysql` und `openssl`
 - MySQL 8 oder kompatible MariaDB
-- Für Testbetrieb HTTP-URL; für öffentlichen Produktivbetrieb zwingend HTTPS
+- HTTP- oder HTTPS-URL; für öffentlichen Produktivbetrieb wird HTTPS dringend empfohlen
 - Autorisierter SMTP-Server, der vom Windows-Server erreichbar ist
 - Optional die unter Windows installierbare PHP-IMAP-Erweiterung für Bounce-Abholung
 
@@ -22,7 +22,7 @@ Die PHPMailer-Kerndateien v7.1.1 sind inklusive LGPL-Lizenz unter `assets/vendor
 3. Für eine bestehende Installation aus der vorherigen CMS-Version statt des Neuimports einmalig `database-migration-delivery.sql` auf der CMS-Datenbank ausführen, sofern die SMTP-/Queue-Tabellen noch fehlen. Anschließend bei bestehenden Installationen einmalig `database-migration-smtp-proxy.sql` ausführen, sofern `smtp_profiles.proxy_id` noch fehlt. Bei einer Neuinstallation mit der aktuellen `database.sql` sind beide Migrationen bereits enthalten und dürfen nicht zusätzlich ausgeführt werden. Bei einem abweichenden Datenbanknamen die `USE`-Zeile anpassen. Vorher ein Datenbankbackup erstellen und den Worker während der Migration anhalten; die Migrationsskripte sind nicht für wiederholte Ausführung vorgesehen.
 4. `config.php` bearbeiten:
    - Datenbankzugang eintragen.
-   - `app.url` auf die Website-Adresse setzen, ohne abschließenden Slash. Standard ist `http://localhost`; für öffentlich erreichbare Installation HTTPS verwenden.
+   - `app.url` auf die für Empfänger erreichbare Website-Adresse setzen, ohne abschließenden Slash, z. B. `http://panel.example.test`. Standard ist `http://localhost`; für öffentlich erreichbare Installationen wird HTTPS dringend empfohlen.
    - `app.encryption_key` durch genau 64 zufällige Hex-Zeichen ersetzen. In Windows PowerShell kann ein Schlüssel so erzeugt werden:
 
      ```powershell
@@ -55,9 +55,11 @@ Unter **SMTP Settings → Fester SOCKS5-Proxy** genau einen Endpunkt auswählen,
 
 Der Proxy baut die Verbindung zum SMTP-Server auf und löst dessen Hostnamen auf. STARTTLS und implizites TLS prüfen weiterhin das Zertifikat des SMTP-Servers. SOCKS5 selbst verschlüsselt weder Proxy-Anmeldedaten noch die Verbindung zum Proxy; nur vertrauenswürdige, gegebenenfalls zusätzlich abgesicherte Endpunkte verwenden. Ein fehlender, inaktiver oder nicht erreichbarer Proxy führt zum Fehler, niemals zum direkten Versand oder Wechsel auf einen anderen Proxy. SMTP-Verbindungsfehler behalten die bestehenden Regeln zum Pausieren und zur manuellen Prüfung bei. Eine feste Proxy-Verbindung garantiert keine Posteingangszustellung und dient nicht zur Umgehung von Provider-Limits.
 
-### HTTP-Testbetrieb
+### HTTP-Betrieb und SMTP-Verschlüsselung
 
-Die Anwendung akzeptiert standardmäßig `http://localhost` für lokale Tests; die Navigation zeigt auf jeder Admin-Seite einen deutlichen Warnhinweis. Bei HTTP können Passwörter, Sitzungen, SMTP-Zugangsdaten und Abmeldetoken von Dritten mitgelesen oder verändert werden. HTTP deshalb nur lokal oder in einem abgeschotteten Testnetz verwenden, nie öffentlich oder für echte Marketingkontakte. Für Produktivbetrieb `app.url` auf HTTPS ändern und HTTP in IIS auf HTTPS umleiten bzw. deaktivieren.
+Das Panel und der Kampagnenversand funktionieren mit HTTP und HTTPS ohne zusätzliche Freigabe. `app.url` muss auf die für Empfänger erreichbare Panel-Adresse zeigen, damit Abmeldelinks funktionieren; eine bisherige Einstellung `app.allow_insecure_http` wird nicht mehr ausgewertet. Die Navigation zeigt bei HTTP einen Warnhinweis, blockiert aber keine Funktionen. SMTP-STARTTLS bzw. SSL/TLS bleibt unabhängig davon aktiv und prüft weiterhin das Mailserver-Zertifikat, auch beim Versand über den fest zugewiesenen SOCKS5-Proxy. Ein eigenes HTTPS-Zertifikat für das Panel ist dafür nicht erforderlich.
+
+SMTP-TLS/SSL schützt **nicht** die Browser-Verbindung zum Panel oder HTTP-Abmeldelinks. Bei HTTP können Passwörter, Sitzungen, SMTP-Zugangsdaten und Abmeldetoken von Dritten mitgelesen oder verändert werden. HTTP deshalb nur lokal oder in einem abgeschotteten Netz verwenden. Für öffentliche Nutzung wird dringend empfohlen, `app.url` auf HTTPS zu ändern und HTTP in IIS auf HTTPS umzuleiten bzw. zu deaktivieren.
 
 ## Automatischer Versand unter Windows
 
@@ -85,7 +87,7 @@ Die Aufgabe läuft als `SYSTEM`, startet nur eine Instanz gleichzeitig, protokol
 - Explizite SMTP-4xx-Ablehnungen werden mit begrenzter Wartezeit und bis zu `mailer.max_attempts` wiederholt. Explizite SMTP-Fehlercodes werden als fehlgeschlagen protokolliert.
 - Verbindungsabbrüche ohne klaren SMTP-Antwortcode erhalten den Status `unknown`, pausieren die Kampagne und werden **nicht automatisch erneut gesendet**, weil der Server die Nachricht möglicherweise bereits angenommen hatte. Nach einem Worker-Absturz wird eine solche laufende Nachricht ebenfalls nicht blind wiederholt.
 - Kritische Antworten (z. B. nicht autorisierte SMTP-Anmeldung) pausieren die Kampagne, damit nicht wiederholt an weitere Empfänger mit einer fehlerhaften Konfiguration gesendet wird. Nach Korrektur der Konfiguration muss ein Administrator die Kampagne bewusst fortsetzen.
-- Jede Nachricht enthält signierte individuelle Abmeldelinks sowie `List-Unsubscribe`- und `List-Unsubscribe-Post`-Header. Eine Abmeldung setzt den Kontakt auf `unsubscribed`, fügt ihn der zentralen Suppression-Liste hinzu und entfernt ausstehende Empfängerjobs. In Produktion muss `app.url` auf die öffentliche HTTPS-URL zeigen; HTTP-Links sind ausschließlich für abgeschottete Tests vorgesehen.
+- Jede Nachricht enthält signierte individuelle Abmeldelinks sowie `List-Unsubscribe`- und `List-Unsubscribe-Post`-Header. Eine Abmeldung setzt den Kontakt auf `unsubscribed`, fügt ihn der zentralen Suppression-Liste hinzu und entfernt ausstehende Empfängerjobs. HTTP- und HTTPS-Abmeldelinks werden unterstützt; für öffentliche Nutzung wird HTTPS dringend empfohlen. RFC-8058-One-Click-Abmeldung bei Mailprovidern setzt HTTPS voraus.
 - Das CMS stellt keine DKIM-Signierung bereit. Für Posteingangszustellung sind eigene SPF-, DKIM- und DMARC-Konfiguration und die SMTP-Provider-Vorgaben erforderlich; der technische SMTP-Test garantiert keine Zustellung.
 - Versand darf nur an Kontakte mit gültiger, nachweisbarer Rechtsgrundlage erfolgen. Keine gekauften oder gescrapten Verteiler importieren. Keine Proxy-Rotation oder Provider-Limit-Umgehung.
 

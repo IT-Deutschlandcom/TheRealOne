@@ -132,7 +132,10 @@ if (($argv[1] ?? '') === '--fixture') {
     exit;
 }
 
-$config = ['app' => ['encryption_key' => str_repeat('a', 64)]];
+$config = ['app' => [
+    'encryption_key' => str_repeat('a', 64),
+    'url' => 'http://panel.example.test/cms',
+]];
 $proxy = \MailMarketing\parse_proxy_line('fixture-user:secret:@value@192.0.2.1:1080');
 check($proxy['password'] === 'secret:@value', 'Password delimiters were corrupted.');
 $ipv6 = \MailMarketing\parse_proxy_line('u:p@[2001:0db8::1]:65535');
@@ -243,7 +246,7 @@ try {
                 $mailer->setFrom('sender@example.test', 'Fixture');
                 $mailer->addAddress('recipient@example.test');
                 $mailer->Subject = 'Local transport test';
-                $mailer->Body = 'Controlled local fixture only.';
+                $mailer->Body = 'Unsubscribe: ' . \MailMarketing\unsubscribe_url(42, $config);
                 $success = $mailer->send();
             } catch (\PHPMailer\PHPMailer\Exception $exception) {
                 $success = false;

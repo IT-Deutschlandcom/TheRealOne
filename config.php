@@ -5,7 +5,6 @@ return [
     'app' => [
         'name' => 'Mail Marketing CMS',
         'url' => 'http://localhost',
-        'allow_insecure_http' => true,
         'timezone' => 'Europe/Berlin',
         'debug' => false,
         'session_timeout' => 1800,

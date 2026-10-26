@@ -39,4 +39,4 @@ $admin = current_admin();
             <p class="eyebrow">Administration</p>
             <h1><?= escape($pageTitle) ?></h1>
         </header>
-        <?php if (parse_url((string) ($config['app']['url'] ?? ''), PHP_URL_SCHEME) === 'http'): ?><div class="alert alert-error">HTTP-Testbetrieb: Login, Passwörter und Abmeldetoken werden unverschlüsselt übertragen. Nur lokal/abgeschottet testen; für öffentliche Nutzung HTTPS aktivieren.</div><?php endif; ?>
+        <?php if (parse_url((string) ($config['app']['url'] ?? ''), PHP_URL_SCHEME) === 'http'): ?><div class="alert alert-error">HTTP-Betrieb: Alle Panel-Funktionen sind verfügbar, aber Login, Passwörter und Abmeldetoken werden unverschlüsselt übertragen. SMTP-TLS/SSL schützt nur die Verbindung zum Mailserver. Für öffentliche Nutzung wird HTTPS dringend empfohlen.</div><?php endif; ?>
