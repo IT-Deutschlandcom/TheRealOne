@@ -23,7 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($action === 'start') {
             \MailMarketing\unsubscribe_url(1, $config);
-            $smtpProfile = \MailMarketing\active_smtp_profile($pdo, $config);
+            $pdo->beginTransaction();
+            $smtpProfile = \MailMarketing\active_smtp_profile($pdo, $config, true);
             if (!$smtpProfile || (int) ($smtpProfile['last_test_success'] ?? 0) !== 1) {
                 throw new RuntimeException('Konfigurieren und testen Sie zuerst ein SMTP-Profil.');
             }
@@ -31,7 +32,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$interval || $interval < 60 || $interval > 86400) {
                 throw new RuntimeException('Das Sendeintervall muss zwischen 60 und 86400 Sekunden liegen.');
             }
-            $pdo->beginTransaction();
             $campaignQuery = $pdo->prepare("SELECT id, list_id, status, from_email, html_content, text_content FROM campaigns WHERE id=:id FOR UPDATE");
             $campaignQuery->execute(['id' => $id]);
             $campaign = $campaignQuery->fetch();

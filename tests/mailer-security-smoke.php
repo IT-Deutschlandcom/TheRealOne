@@ -6,7 +6,6 @@ $config = [
     'app' => [
         'url' => 'http://mail.example.test/cms',
         'encryption_key' => str_repeat('a', 64),
-        'allow_insecure_http' => true,
     ],
 ];
 $encrypted = \MailMarketing\encrypt_secret('test-secret', $config);
@@ -40,12 +39,48 @@ if (str_contains($personalized, '<User>') || !str_contains($personalized, '&lt;U
 }
 $httpConfig = $config;
 $httpConfig['app']['allow_insecure_http'] = false;
-try {
-    \MailMarketing\unsubscribe_url(42, $httpConfig);
-    throw new RuntimeException('HTTP unsubscribe URL was allowed without development opt-in.');
-} catch (RuntimeException $exception) {
-    if ($exception->getMessage() === 'HTTP unsubscribe URL was allowed without development opt-in.') {
-        throw $exception;
+if (\MailMarketing\unsubscribe_url(42, $httpConfig) !== $url) {
+    throw new RuntimeException('Legacy HTTP configuration must not block unsubscribe URLs.');
+}
+$httpsConfig = $config;
+$httpsConfig['app']['url'] = 'https://mail.example.test/cms/';
+if (\MailMarketing\unsubscribe_url(42, $httpsConfig) !== preg_replace('/^http:/', 'https:', $url)) {
+    throw new RuntimeException('HTTPS unsubscribe URL regression.');
+}
+foreach ([
+    '', 'ftp://mail.example.test', 'http://user@mail.example.test',
+    'http://mail.example.test?query=1', 'https://mail.example.test#fragment',
+] as $invalidUrl) {
+    $invalidConfig = $config;
+    $invalidConfig['app']['url'] = $invalidUrl;
+    try {
+        \MailMarketing\unsubscribe_url(42, $invalidConfig);
+    } catch (RuntimeException $exception) {
+        continue;
+    }
+    throw new RuntimeException('Invalid unsubscribe base URL was not rejected.');
+}
+foreach ([
+    'tls' => \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS,
+    'ssl' => \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS,
+] as $encryption => $expected) {
+    $mailer = \MailMarketing\create_mailer([
+        'host' => 'smtp.example.test', 'port' => $encryption === 'tls' ? 587 : 465,
+        'username' => 'login@example.test', 'password' => 'test-secret',
+        'timeout_seconds' => 20, 'encryption' => $encryption,
+    ]);
+    if ($mailer->SMTPSecure !== $expected || !$mailer->SMTPAuth ||
+        $mailer->SMTPOptions['ssl'] !== [
+            'verify_peer' => true, 'verify_peer_name' => true, 'allow_self_signed' => false,
+        ]) {
+        throw new RuntimeException('SMTP encryption and certificate verification must remain enabled.');
+    }
+    $mailer->setFrom('sender@example.test', 'Sender');
+    $mailer->addAddress('recipient@example.test');
+    $mailer->Subject = 'HTTP panel test';
+    $mailer->Body = 'Unsubscribe: ' . $url;
+    if (!$mailer->preSend() || !str_contains($mailer->getSentMIMEMessage(), $url)) {
+        throw new RuntimeException('Message preparation failed with an HTTP unsubscribe URL.');
     }
 }
 echo "Mailer security smoke tests passed.\n";
