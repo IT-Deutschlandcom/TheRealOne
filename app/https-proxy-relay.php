@@ -8,8 +8,17 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/HttpProxySMTP.php';
 
+$status = false;
 try {
     $settings = json_decode((string) fgets(STDIN), true, 512, JSON_THROW_ON_ERROR);
+    $status = @stream_socket_client('tcp://' . $settings['status'], $errno, $error,
+        max(0.001, $settings['deadline'] - microtime(true)), STREAM_CLIENT_CONNECT);
+    if (!is_resource($status)) {
+        throw new RuntimeException('HTTPS-Proxy-Relay konnte den Statuskanal nicht öffnen.');
+    }
+    if (fwrite($status, $settings['token']) !== strlen($settings['token'])) {
+        throw new RuntimeException('HTTPS-Proxy-Relay konnte den Statuskanal nicht authentifizieren.');
+    }
     $transport = new \MailMarketing\HttpProxySMTP($settings['proxy']);
     $remote = $transport->connectHttpTunnel($settings['target'], $settings['port'],
         $settings['timeout'], $settings['options'], $settings['deadline']);
@@ -17,8 +26,10 @@ try {
     if (!is_resource($server)) {
         throw new RuntimeException('HTTPS-Proxy-Relay konnte keinen lokalen Port öffnen.');
     }
-    echo 'READY ' . stream_socket_get_name($server, false) . "\n";
-    flush();
+    $ready = 'READY ' . stream_socket_get_name($server, false) . "\n";
+    if (fwrite($status, $ready) !== strlen($ready)) {
+        throw new RuntimeException('HTTPS-Proxy-Relay konnte den Status nicht senden.');
+    }
     $local = @stream_socket_accept($server, max(0.001, $settings['deadline'] - microtime(true)));
     fclose($server);
     if (!is_resource($local)) {
@@ -36,8 +47,11 @@ try {
     if (!hash_equals($settings['token'], $token)) {
         throw new RuntimeException('HTTPS-Proxy-Relay: lokale Anmeldung abgelehnt.');
     }
-    echo "OK\n";
-    flush();
+    if (fwrite($status, "OK\n") !== 3) {
+        throw new RuntimeException('HTTPS-Proxy-Relay konnte den Status nicht senden.');
+    }
+    fclose($status);
+    $status = false;
 
     // Separate TLS streams preserve end-to-end SMTP TLS inside the proxy's TLS tunnel.
     stream_set_blocking($local, false);
@@ -95,6 +109,9 @@ try {
     fclose($remote);
 } catch (Throwable $exception) {
     error_log('HTTPS proxy relay: ' . $exception->getMessage());
-    echo 'ERROR ' . str_replace(["\r", "\n"], ' ', $exception->getMessage()) . "\n";
+    if (is_resource($status)) {
+        @fwrite($status, 'ERROR ' . str_replace(["\r", "\n"], ' ', $exception->getMessage()) . "\n");
+        fclose($status);
+    }
     exit(1);
 }

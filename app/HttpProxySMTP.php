@@ -23,9 +23,19 @@ final class HttpProxySMTP extends Socks5SMTP
             throw new RuntimeException('HTTPS-Proxys benötigen proc_open und PHP-CLI im PHP-Installationsverzeichnis.');
         }
         $connection = false;
+        $statusServer = false;
+        $statusConnection = false;
         try {
+            $statusServer = @stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
+            if (!is_resource($statusServer)) {
+                throw new RuntimeException('HTTPS-Proxy-Relay konnte keinen lokalen Statuskanal öffnen.');
+            }
+            $statusAddress = stream_socket_get_name($statusServer, false);
+            if (!is_string($statusAddress)) {
+                throw new RuntimeException('HTTPS-Proxy-Relay konnte keinen lokalen Statuskanal öffnen.');
+            }
             $this->relay = proc_open([$binary, __DIR__ . '/https-proxy-relay.php'],
-                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', 'php://stderr', 'a']], $this->relayPipes);
+                [0 => ['pipe', 'r'], 1 => ['file', 'php://stderr', 'a'], 2 => ['file', 'php://stderr', 'a']], $this->relayPipes);
             if (!is_resource($this->relay)) {
                 throw new RuntimeException('HTTPS-Proxy-Relay konnte nicht gestartet werden.');
             }
@@ -33,11 +43,34 @@ final class HttpProxySMTP extends Socks5SMTP
             $this->writeBytes($this->relayPipes[0], json_encode([
                 'proxy' => $this->proxy, 'target' => $target, 'port' => $port,
                 'timeout' => $timeout, 'options' => $options, 'deadline' => $deadline, 'token' => $token,
+                'status' => $statusAddress,
             ], JSON_THROW_ON_ERROR) . "\n", $deadline);
             fclose($this->relayPipes[0]);
             unset($this->relayPipes[0]);
-            $this->setDeadline($this->relayPipes[1], $deadline);
-            $status = fgets($this->relayPipes[1], 1024);
+            $read = [$statusServer];
+            $write = $except = null;
+            $remaining = $deadline - microtime(true);
+            $seconds = max(0, (int) $remaining);
+            $microseconds = max(0, (int) (($remaining - (int) $remaining) * 1_000_000));
+            if ($remaining <= 0 || @stream_select($read, $write, $except, $seconds, $microseconds) !== 1) {
+                throw new RuntimeException('Zeitlimit beim Proxy-Verbindungsaufbau überschritten.');
+            }
+            $statusConnection = @stream_socket_accept($statusServer, 0);
+            fclose($statusServer);
+            $statusServer = false;
+            if (!is_resource($statusConnection)) {
+                throw new RuntimeException('HTTPS-Proxy-Relay konnte keinen Statuskanal öffnen.');
+            }
+            if (!hash_equals($token, $this->readBytes($statusConnection, strlen($token), $deadline))) {
+                throw new RuntimeException('HTTPS-Proxy-Relay konnte nicht authentifiziert werden.');
+            }
+            $status = '';
+            while (!str_ends_with($status, "\n")) {
+                if (strlen($status) >= 1023) {
+                    throw new RuntimeException('HTTPS-Proxy-Relay meldet keine Verbindung.');
+                }
+                $status .= $this->readBytes($statusConnection, 1, $deadline);
+            }
             if (!is_string($status) || !preg_match('/^READY (127\.0\.0\.1:[0-9]+)\n$/D', $status, $matches)) {
                 throw new RuntimeException(is_string($status) && str_starts_with($status, 'ERROR ')
                     ? trim(substr($status, 6)) : 'HTTPS-Proxy-Relay meldet keine Verbindung.');
@@ -48,14 +81,21 @@ final class HttpProxySMTP extends Socks5SMTP
                 throw new RuntimeException('Lokale Verbindung zum HTTPS-Proxy-Relay fehlgeschlagen.');
             }
             $this->writeBytes($connection, $token, $deadline);
-            $this->setDeadline($this->relayPipes[1], $deadline);
-            if (fgets($this->relayPipes[1], 1024) !== "OK\n") {
+            if ($this->readBytes($statusConnection, 3, $deadline) !== "OK\n") {
                 throw new RuntimeException('HTTPS-Proxy-Relay konnte nicht authentifiziert werden.');
             }
+            fclose($statusConnection);
+            $statusConnection = false;
             return $connection;
         } catch (\Throwable $exception) {
             if (is_resource($connection)) {
                 fclose($connection);
+            }
+            if (is_resource($statusServer)) {
+                fclose($statusServer);
+            }
+            if (is_resource($statusConnection)) {
+                fclose($statusConnection);
             }
             $this->closeRelay();
             throw new RuntimeException($exception->getMessage(), 0, $exception);
