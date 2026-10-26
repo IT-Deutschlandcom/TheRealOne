@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $profile = $pdo->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1')->fetch() ?: [];
 $proxies = $pdo->query(
-    'SELECT p.id,p.host,p.port,p.is_active,g.name AS group_name
+    'SELECT p.id,p.host,p.port,p.protocol,p.is_active,g.name AS group_name
      FROM proxies p LEFT JOIN proxy_groups g ON g.id=p.group_id ORDER BY g.name,p.host,p.port'
 )->fetchAll();
 $keyReady = true;
@@ -136,18 +136,18 @@ require dirname(__DIR__) . '/includes/header.php';
     <p class="muted">Letzter Verbindungstest: <?= !empty($profile['last_test_at']) ? escape($profile['last_test_at']) . (!empty($profile['last_test_success']) ? ' · erfolgreich' : ' · fehlgeschlagen') : 'noch nicht durchgeführt' ?></p>
     <?php if (!$keyReady): ?><div class="alert alert-error">SMTP-Konfiguration ist gesperrt, bis ein sicherer Verschlüsselungsschlüssel in config.php hinterlegt ist.</div><?php endif; ?>
     <p class="muted">Das Passwort wird mit AES-256-GCM verschlüsselt gespeichert und nie erneut im Formular angezeigt. TLS-Zertifikate werden validiert. Verwenden Sie nur einen SMTP-Server, für den Sie ausdrücklich autorisiert sind.</p>
-    <p class="muted">SMTP-TLS/SSL funktioniert unabhängig davon, ob das Panel über HTTP oder HTTPS geöffnet wird. Das gilt auch bei einem fest zugewiesenen SOCKS5-Proxy; ein HTTPS-Zertifikat für das Panel ist für SMTP-TLS nicht erforderlich.</p>
+    <p class="muted">SMTP-TLS/SSL funktioniert unabhängig davon, ob das Panel über HTTP oder HTTPS geöffnet wird. Das gilt auch bei einem fest zugewiesenen SOCKS5-, HTTP- oder HTTPS-Proxy; ein HTTPS-Zertifikat für das Panel ist für SMTP-TLS nicht erforderlich.</p>
     <form method="post" class="form-grid">
         <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
         <input type="hidden" name="action" value="save">
         <label>SMTP-Hostname<input name="host" maxlength="253" required value="<?= escape($profile['host'] ?? '') ?>"></label>
-        <label>Fester SOCKS5-Proxy<select name="proxy_id">
+        <label>Fester Proxy (SOCKS5 / HTTP / HTTPS)<select name="proxy_id">
             <option value="">Kein Proxy (direkte Verbindung)</option>
             <?php foreach ($proxies as $proxy): ?>
-                <option value="<?= (int) $proxy['id'] ?>" <?= (int) ($profile['proxy_id'] ?? 0) === (int) $proxy['id'] ? 'selected' : '' ?>><?= escape(($proxy['group_name'] ? $proxy['group_name'] . ' · ' : '') . $proxy['host'] . ':' . $proxy['port']) ?><?= !(int) $proxy['is_active'] ? ' (inaktiv, nicht verwendbar)' : '' ?></option>
+                <option value="<?= (int) $proxy['id'] ?>" <?= (int) ($profile['proxy_id'] ?? 0) === (int) $proxy['id'] ? 'selected' : '' ?>><?= escape(strtoupper($proxy['protocol']) . ' · ' . ($proxy['group_name'] ? $proxy['group_name'] . ' · ' : '') . $proxy['host'] . ':' . $proxy['port']) ?><?= !(int) $proxy['is_active'] ? ' (inaktiv, nicht verwendbar)' : '' ?></option>
             <?php endforeach; ?>
         </select></label>
-        <p class="muted">Proxys im Proxy Manager importieren. Die Zuordnung bleibt während laufender und pausierter Kampagnen unverändert. Bei Proxyfehlern gibt es keinen direkten Fallback. Nach einer Änderung das Profil erneut testen. SOCKS5 verschlüsselt die Proxy-Anmeldung nicht; nur vertrauenswürdige oder zusätzlich abgesicherte Proxy-Verbindungen verwenden. SMTP-TLS bleibt bis zum SMTP-Server aktiv.</p>
+        <p class="muted">Protokoll im Proxy Manager beim Anlegen oder Importieren wählen; hier den passenden Endpunkt zuweisen. Die Zuordnung bleibt während laufender und pausierter Kampagnen unverändert. Bei Proxyfehlern gibt es keinen direkten Fallback. Nach einer Änderung das Profil erneut testen. HTTP/HTTPS müssen CONNECT zum SMTP-Port erlauben (keine oder Basic-Anmeldung). HTTPS benötigt ein gültiges Proxy-Zertifikat sowie proc_open und PHP-CLI auf dem Server. SOCKS5 und HTTP verschlüsseln die Proxy-Anmeldung nicht; nur vertrauenswürdige oder zusätzlich abgesicherte Verbindungen verwenden. SMTP-TLS bleibt bis zum SMTP-Server aktiv.</p>
         <div class="grid">
             <label>Port<input type="number" name="port" min="1" max="65535" required value="<?= escape($profile['port'] ?? 587) ?>"></label>
             <label>Verschlüsselung<select name="encryption"><option value="tls" <?= ($profile['encryption'] ?? 'tls') === 'tls' ? 'selected' : '' ?>>STARTTLS</option><option value="ssl" <?= ($profile['encryption'] ?? '') === 'ssl' ? 'selected' : '' ?>>SSL/TLS</option><option value="none" <?= ($profile['encryption'] ?? '') === 'none' ? 'selected' : '' ?>>Keine (nur internes, vertrauenswürdiges Relay)</option></select></label>

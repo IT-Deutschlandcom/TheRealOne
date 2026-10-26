@@ -10,6 +10,7 @@ require_once dirname(__DIR__) . '/assets/vendor/phpmailer/Exception.php';
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/SMTP.php';
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/PHPMailer.php';
 require_once __DIR__ . '/Socks5SMTP.php';
+require_once __DIR__ . '/HttpProxySMTP.php';
 
 function encryption_key(array $config): string
 {
@@ -64,7 +65,7 @@ function active_smtp_profile(\PDO $pdo, array $config, bool $forUpdate = false):
     $profile['password'] = decrypt_secret($profile['password_encrypted'], $config);
     $profile['proxy'] = null;
     if (!empty($profile['proxy_id'])) {
-        $query = $pdo->prepare('SELECT host, port, username, password_encrypted, is_active FROM proxies WHERE id=:id');
+        $query = $pdo->prepare('SELECT host, port, protocol, username, password_encrypted, is_active FROM proxies WHERE id=:id');
         $query->execute(['id' => $profile['proxy_id']]);
         $proxy = $query->fetch();
         if (!$proxy || !(int) $proxy['is_active']) {
@@ -72,7 +73,7 @@ function active_smtp_profile(\PDO $pdo, array $config, bool $forUpdate = false):
         }
         $proxy['username'] = (string) $proxy['username'];
         $proxy['password'] = decrypt_secret($proxy['password_encrypted'], $config);
-        validate_proxy($proxy['host'], (int) $proxy['port'], $proxy['username'], $proxy['password']);
+        validate_proxy($proxy['host'], (int) $proxy['port'], $proxy['username'], $proxy['password'], $proxy['protocol']);
         $profile['proxy'] = $proxy;
     }
     return $profile;
@@ -85,7 +86,9 @@ function create_mailer(array $profile): PHPMailer
         throw new RuntimeException('Die zugewiesene Proxy-Konfiguration fehlt. Direkter Versand ist gesperrt.');
     }
     if (!empty($profile['proxy'])) {
-        $mailer->setSMTPInstance(new Socks5SMTP($profile['proxy']));
+        $proxy = $profile['proxy'];
+        $mailer->setSMTPInstance(($proxy['protocol'] ?? 'socks5') === 'socks5'
+            ? new Socks5SMTP($proxy) : new HttpProxySMTP($proxy));
     }
     $mailer->isSMTP();
     $mailer->Host = $profile['host'];
@@ -123,14 +126,17 @@ function test_smtp_connection(array $profile): array
         $elapsed = (int) round((microtime(true) - $startedAt) * 1000);
         if (!$connected) {
             $mailer->smtpClose();
-            return ['ok' => false, 'elapsed_ms' => $elapsed, 'message' => 'SMTP-Verbindung oder Authentifizierung fehlgeschlagen.'];
+            $transportError = $mailer->getSMTPInstance()->getError()['error'] ?? '';
+            return ['ok' => false, 'elapsed_ms' => $elapsed, 'message' => $transportError ?: 'SMTP-Verbindung oder Authentifizierung fehlgeschlagen.'];
         }
         $reply = (string) $mailer->getSMTPInstance()->getLastReply();
         $mailer->smtpClose();
         return ['ok' => true, 'elapsed_ms' => $elapsed, 'message' => substr(preg_replace('/[\r\n]+/', ' ', $reply), 0, 180)];
     } catch (\Throwable $exception) {
+        $transportError = $mailer->getSMTPInstance()->getError()['error'] ?? '';
+        error_log('SMTP connection test failed: ' . $exception->getMessage());
         $mailer->smtpClose();
-        return ['ok' => false, 'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000), 'message' => 'Verbindung fehlgeschlagen; Zugangsdaten und Serverprotokoll prüfen.'];
+        return ['ok' => false, 'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000), 'message' => $transportError ?: 'Verbindung fehlgeschlagen; Zugangsdaten und Serverprotokoll prüfen.'];
     }
 }
 
