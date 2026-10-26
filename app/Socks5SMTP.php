@@ -9,13 +9,13 @@ use RuntimeException;
 require_once __DIR__ . '/Proxy.php';
 require_once dirname(__DIR__) . '/assets/vendor/phpmailer/SMTP.php';
 
-final class Socks5SMTP extends SMTP
+class Socks5SMTP extends SMTP
 {
-    private array $proxy;
+    protected array $proxy;
 
     public function __construct(array $proxy)
     {
-        validate_proxy($proxy['host'], (int) $proxy['port'], $proxy['username'], $proxy['password']);
+        validate_proxy($proxy['host'], (int) $proxy['port'], $proxy['username'], $proxy['password'], $proxy['protocol'] ?? 'socks5');
         $this->proxy = $proxy;
     }
 
@@ -29,7 +29,7 @@ final class Socks5SMTP extends SMTP
             $target = trim($target, '[]');
             if ($port < 1 || $port > 65535 || strlen($target) > 253 ||
                 !(filter_var($target, FILTER_VALIDATE_IP) || filter_var($target, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME))) {
-                throw new RuntimeException('Ungültiges SMTP-Ziel für SOCKS5.');
+                throw new RuntimeException('Ungültiges SMTP-Ziel für den Proxy.');
             }
             // TLS must authenticate the SMTP server, not the proxy endpoint.
             $options['ssl']['peer_name'] = $target;
@@ -37,6 +37,28 @@ final class Socks5SMTP extends SMTP
             $options['ssl']['verify_peer'] = true;
             $options['ssl']['verify_peer_name'] = true;
             $options['ssl']['allow_self_signed'] = false;
+            $connection = $this->openTunnel($target, (int) $port, $timeout, $options, $deadline);
+            $this->setDeadline($connection, $deadline);
+            if ($implicitTls && @stream_socket_enable_crypto($connection, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
+                throw new RuntimeException('TLS-Verifikation des SMTP-Servers fehlgeschlagen.');
+            }
+            stream_set_timeout($connection, $timeout);
+            return $connection;
+        } catch (RuntimeException $exception) {
+            if (is_resource($connection)) {
+                fclose($connection);
+            }
+            $this->close();
+            $this->setError($exception->getMessage());
+            error_log('Proxy SMTP transport: ' . $exception->getMessage());
+            return false;
+        }
+    }
+
+    protected function openTunnel(string $target, int $port, int $timeout, array $options, float $deadline)
+    {
+        $connection = false;
+        try {
             $proxyHost = $this->proxy['host'];
             if (str_contains($proxyHost, ':')) {
                 $proxyHost = '[' . $proxyHost . ']';
@@ -84,53 +106,46 @@ final class Socks5SMTP extends SMTP
                 throw new RuntimeException('Ungültige SOCKS5-Antwortadresse.');
             }
             $this->readBytes($connection, $addressLength + 2, $deadline);
-            $this->setDeadline($connection, $deadline);
-            if ($implicitTls && @stream_socket_enable_crypto($connection, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
-                throw new RuntimeException('TLS-Verifikation des SMTP-Servers fehlgeschlagen.');
-            }
-            stream_set_timeout($connection, $timeout);
             return $connection;
         } catch (RuntimeException $exception) {
             if (is_resource($connection)) {
                 fclose($connection);
             }
-            $this->setError($exception->getMessage());
-            error_log('SOCKS5 SMTP transport: ' . $exception->getMessage());
-            return false;
+            throw $exception;
         }
     }
 
-    private function setDeadline($connection, float $deadline): void
+    protected function setDeadline($connection, float $deadline): void
     {
         $remaining = $deadline - microtime(true);
         if ($remaining <= 0) {
-            throw new RuntimeException('Zeitlimit beim SOCKS5-Verbindungsaufbau überschritten.');
+            throw new RuntimeException('Zeitlimit beim Proxy-Verbindungsaufbau überschritten.');
         }
         $seconds = (int) $remaining;
         stream_set_timeout($connection, $seconds, max(1, (int) (($remaining - $seconds) * 1_000_000)));
     }
 
-    private function readBytes($connection, int $length, float $deadline): string
+    protected function readBytes($connection, int $length, float $deadline): string
     {
         $data = '';
         while (strlen($data) < $length) {
             $this->setDeadline($connection, $deadline);
             $part = @fread($connection, $length - strlen($data));
             if ($part === false || $part === '') {
-                throw new RuntimeException('SOCKS5-Antwort unvollständig oder Zeitlimit überschritten.');
+                throw new RuntimeException('Proxy-Antwort unvollständig oder Zeitlimit überschritten.');
             }
             $data .= $part;
         }
         return $data;
     }
 
-    private function writeBytes($connection, string $data, float $deadline): void
+    protected function writeBytes($connection, string $data, float $deadline): void
     {
         while ($data !== '') {
             $this->setDeadline($connection, $deadline);
             $written = @fwrite($connection, $data);
             if ($written === false || $written === 0) {
-                throw new RuntimeException('SOCKS5-Anfrage konnte nicht vollständig übertragen werden.');
+                throw new RuntimeException('Proxy-Anfrage konnte nicht vollständig übertragen werden.');
             }
             $data = substr($data, $written);
         }

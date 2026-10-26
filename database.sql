@@ -278,6 +278,7 @@ CREATE TABLE proxies (
     group_id BIGINT UNSIGNED NULL,
     host VARCHAR(253) NOT NULL,
     port SMALLINT UNSIGNED NOT NULL,
+    protocol ENUM('socks5','http','https') NOT NULL DEFAULT 'socks5',
     username VARCHAR(254) NULL,
     password_encrypted TEXT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -285,7 +286,7 @@ CREATE TABLE proxies (
     notes VARCHAR(500) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_proxies_host_port (host, port),
+    UNIQUE KEY uq_proxies_protocol_host_port (protocol, host, port),
     CONSTRAINT fk_proxies_group FOREIGN KEY (group_id) REFERENCES proxy_groups(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
